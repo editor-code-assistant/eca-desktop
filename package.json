@@ -1,0 +1,36 @@
+{
+  "name": "eca-desktop",
+  "version": "0.1.0",
+  "description": "ECA Desktop - AI Code Assistant",
+  "author": "Editor Code Assistant",
+  "license": "Apache-2.0",
+  "main": "dist/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n webview,electron \"cd eca-webview && npm run dev\" \"wait-on http://localhost:5173 && NODE_ENV=development electron .\"",
+    "build:webview": "cd eca-webview && npm install && npm run build",
+    "build:main": "esbuild src/main/main.ts --bundle --platform=node --outfile=dist/main.js --external:electron --external:vscode-jsonrpc",
+    "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --outfile=dist/preload.js --external:electron",
+    "build": "npm run build:webview && npm run build:main && npm run build:preload",
+    "package": "npm run build && electron-builder",
+    "start": "electron .",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "extract-zip": "^2.0.1",
+    "follow-redirects": "^1.15.9",
+    "vscode-jsonrpc": "^8.2.1"
+  },
+  "devDependencies": {
+    "@types/follow-redirects": "^1.13.0",
+    "@types/node": "^20.x",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.25.3",
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.8.3",
+    "wait-on": "^8.0.3"
+  }
+}

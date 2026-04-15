@@ -1,0 +1,31 @@
+appId: dev.eca.desktop
+productName: ECA
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - eca-webview/dist/**/*
+  - resources/**/*
+
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.icns
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+
+linux:
+  icon: resources/icon.png
+  target:
+    - AppImage
+    - deb
+  category: Development
+  maintainer: Editor Code Assistant
+
+publish:
+  provider: github
+  owner: editor-code-assistant
+  repo: eca-desktop
