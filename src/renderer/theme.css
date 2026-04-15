@@ -83,21 +83,30 @@ html[data-editor="web"] {
   --eca-sidebar-bg: #0e0e1a;
 }
 
-/* ── Desktop-specific layout ── */
+/* ═══════════════════════════════════════════════════
+ * Layout modes
+ *
+ *   mobile  (<768px)  — drawer sidebar, mobile title bar
+ *   normal  (768–1099px) — sidebar visible, webview looks standard
+ *   big     (≥1100px) — centered max-width content, card-style prompt
+ *
+ * "normal" is the webview default — no overrides needed.
+ * ═══════════════════════════════════════════════════ */
 
-/* Contexts area (@ file picker) — hide since there is no file-picker integration yet */
+/* ── Always-on web overrides ── */
+/* Hide contexts file-picker (no desktop integration yet) */
 [data-editor="web"] .prompt-area .contexts {
   display: none;
 }
 
-/* Hide webview's built-in chat-header on desktop — the sidebar replaces it */
+/* ── Normal + Big: sidebar replaces chat header (≥768px) ── */
 @media (min-width: 768px) {
   [data-editor="web"] .chat-header {
     display: none;
   }
 }
 
-/* On mobile: hide tab row but show the title bar (for sidebar toggle) */
+/* ── Mobile (<768px): drawer sidebar, mobile title bar ── */
 @media (max-width: 767px) {
   [data-editor="web"] .chat-header .chats,
   [data-editor="web"] .chat-header .trust-toggle {
@@ -105,5 +114,68 @@ html[data-editor="web"] {
   }
   [data-editor="web"] .chat-header .web-chat-title-bar {
     display: flex;
+  }
+}
+
+/* ── Big mode (≥1100px): centered content, card-style prompt ── */
+@media (min-width: 1100px) {
+  /* Constrain content width and center */
+  [data-editor="web"] .messages-container,
+  [data-editor="web"] .progress-area,
+  [data-editor="web"] .prompt-area {
+    max-width: 52em;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  /* Card-style prompt: full border replaces webview's top-border-only */
+  [data-editor="web"] .prompt-area {
+    border: 1px solid var(--eca-base-border);
+    border-radius: 8px;
+    padding: 0.6em 1em;
+    margin-bottom: 0.8em;
+    background: var(--eca-panel-bg);
+    box-shadow: none;
+  }
+  /* State borders — ordered by priority (last wins when multiple apply):
+     focused (teal) < running (yellow) < waiting-approval (orange) */
+  [data-editor="web"] .prompt-area.focused {
+    border-color: var(--eca-link-fg);
+    box-shadow: none;
+  }
+  [data-editor="web"] .prompt-area.running {
+    border-color: var(--eca-warning-fg, #cca700);
+    box-shadow: none;
+  }
+  [data-editor="web"] .prompt-area.waiting-approval {
+    border-color: var(--eca-approval-fg, #e8850c);
+    box-shadow: none;
+  }
+  [data-editor="web"] .prompt-area .field {
+    background: transparent;
+  }
+
+  /* Progress + prompt form a single card when progress is visible.
+     Progress gets the top border/corners, prompt loses its top border. */
+  [data-editor="web"] .progress-area {
+    border: 1px solid var(--eca-base-border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 0;
+    background: var(--eca-panel-bg);
+  }
+  [data-editor="web"] .progress-area + .prompt-area {
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  /* Progress inherits the prompt's state color */
+  [data-editor="web"] .progress-area:has(+ .prompt-area.running) {
+    border-color: var(--eca-warning-fg, #cca700);
+  }
+  [data-editor="web"] .progress-area:has(+ .prompt-area.waiting-approval) {
+    border-color: var(--eca-approval-fg, #e8850c);
   }
 }

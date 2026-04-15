@@ -14,7 +14,59 @@
 
     var entries = [];
     var selectedId = null;
+    var activeWorkspaceFolderName = null;
     var isOpen = false;
+
+    // ── Helpers ──
+
+    function groupEntriesByWorkspace(entries) {
+        var groups = {};
+        var groupOrder = [];
+        entries.forEach(function (entry) {
+            var wsName = entry.workspaceFolderName || 'Default';
+            if (!groups[wsName]) {
+                groups[wsName] = [];
+                groupOrder.push(wsName);
+            }
+            groups[wsName].push(entry);
+        });
+        return { groups: groups, groupOrder: groupOrder };
+    }
+
+    function createChatItem(entry) {
+        var item = document.createElement('div');
+        item.className = 'sidebar-chat-item';
+        if (entry.id === selectedId) item.classList.add('active');
+        if (entry.status === 'generating' || entry.status === 'busy') {
+            item.classList.add('generating');
+        }
+
+        var title = document.createElement('span');
+        title.className = 'sidebar-chat-title';
+        title.textContent = entry.title || 'New Chat';
+
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = 'sidebar-chat-delete';
+        deleteBtn.title = 'Delete chat';
+        deleteBtn.textContent = '\u00d7'; // ×
+        deleteBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (window.ecaDesktop) {
+                window.ecaDesktop.deleteChat(entry.id);
+            }
+        });
+
+        item.appendChild(title);
+        item.appendChild(deleteBtn);
+
+        item.addEventListener('click', function () {
+            if (window.ecaDesktop) {
+                window.ecaDesktop.selectChat(entry.id);
+            }
+        });
+
+        return item;
+    }
 
     // ── Render ──
 
@@ -27,39 +79,36 @@
 
         chatList.innerHTML = '';
 
-        entries.forEach(function (entry) {
-            var item = document.createElement('div');
-            item.className = 'sidebar-chat-item';
-            if (entry.id === selectedId) item.classList.add('active');
-            if (entry.status === 'generating' || entry.status === 'busy') {
-                item.classList.add('generating');
+        var result = groupEntriesByWorkspace(entries);
+
+        result.groupOrder.forEach(function (wsName) {
+            var group = document.createElement('div');
+            group.className = 'sidebar-workspace-group';
+            if (wsName === activeWorkspaceFolderName) {
+                group.classList.add('active');
             }
 
-            var title = document.createElement('span');
-            title.className = 'sidebar-chat-title';
-            title.textContent = entry.title || 'New Chat';
+            // Workspace header
+            var header = document.createElement('div');
+            header.className = 'sidebar-workspace-header';
 
-            var deleteBtn = document.createElement('button');
-            deleteBtn.className = 'sidebar-chat-delete';
-            deleteBtn.title = 'Delete chat';
-            deleteBtn.textContent = '\u00d7'; // ×
-            deleteBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                if (window.ecaDesktop) {
-                    window.ecaDesktop.deleteChat(entry.id);
-                }
+            var indicator = document.createElement('span');
+            indicator.className = 'sidebar-workspace-indicator';
+
+            var name = document.createElement('span');
+            name.className = 'sidebar-workspace-name';
+            name.textContent = wsName;
+
+            header.appendChild(indicator);
+            header.appendChild(name);
+            group.appendChild(header);
+
+            // Chat items under this workspace
+            result.groups[wsName].forEach(function (entry) {
+                group.appendChild(createChatItem(entry));
             });
 
-            item.appendChild(title);
-            item.appendChild(deleteBtn);
-
-            item.addEventListener('click', function () {
-                if (window.ecaDesktop) {
-                    window.ecaDesktop.selectChat(entry.id);
-                }
-            });
-
-            chatList.appendChild(item);
+            chatList.appendChild(group);
         });
     }
 
@@ -98,6 +147,7 @@
         window.ecaDesktop.onChatListUpdate(function (data) {
             entries = data.entries || [];
             selectedId = data.selectedId;
+            activeWorkspaceFolderName = data.activeWorkspaceFolderName || null;
             render();
         });
 

@@ -79,6 +79,26 @@ async function main(): Promise<void> {
     setupAutoUpdater(mainWindow);
   }
 
+  // Dev mode: watch renderer files and auto-reload the window
+  if (!app.isPackaged) {
+    const fs = require('fs');
+    const rendererDir = path.join(__dirname, '../src/renderer');
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    fs.watch(rendererDir, { recursive: true }, (_event: string, filename: string) => {
+      if (!filename) return;
+      // Debounce: multiple changes fire rapidly, reload once
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        console.log(`[Dev] Renderer file changed: ${filename}, reloading…`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.reload();
+        }
+      }, 300);
+    });
+    console.log('[Dev] Watching renderer files for live reload');
+  }
+
   app.on('before-quit', async () => {
     await ecaServer.stop();
   });

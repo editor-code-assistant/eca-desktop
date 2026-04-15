@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron';
+import * as path from 'path';
 import { EcaServer, EcaServerStatus } from './server';
 import * as rpc from './rpc';
 
@@ -12,6 +13,7 @@ interface ChatEntry {
     id: string;
     title: string;
     status: string;
+    workspaceFolderName: string;
 }
 
 export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
@@ -31,12 +33,14 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
     const chatEntries = new Map<string, ChatEntry>();
     const chatPayloads = new Map<string, any>();
     let selectedChatId: string | null = null;
+    const workspaceFolderName = path.basename(process.cwd());
 
     function sendChatListUpdate() {
         if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('chat-list-update', {
                 entries: Array.from(chatEntries.values()).reverse(),
                 selectedId: selectedChatId,
+                activeWorkspaceFolderName: workspaceFolderName,
             });
         }
     }
@@ -47,6 +51,23 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
     server.onStatusChanged = (status: EcaServerStatus) => {
         sendToRenderer('server/statusChanged', status);
     };
+
+    // ============================================================
+    // Re-hydrate renderer after reload (dev live-reload or manual)
+    // ============================================================
+    mainWindow.webContents.on('did-finish-load', () => {
+        // Re-send current server status so the webview doesn't get stuck
+        sendToRenderer('server/statusChanged', server.status);
+
+        // Re-send cached MCP server state
+        const servers = Object.values(mcpServers);
+        if (servers.length > 0) {
+            sendToRenderer('tool/serversUpdated', servers);
+        }
+
+        // Re-send sidebar chat list
+        sendChatListUpdate();
+    });
 
     // ============================================================
     // Server -> Renderer (JSON-RPC notifications)
@@ -84,6 +105,7 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
                     id: chatId,
                     title: params.title || chatEntries.get(chatId)?.title || 'New Chat',
                     status: params.status || 'idle',
+                    workspaceFolderName,
                 });
                 chatPayloads.set(chatId, params);
                 selectedChatId = chatId;
@@ -155,6 +177,7 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
                             id: result.chatId,
                             title,
                             status: 'generating',
+                            workspaceFolderName,
                         });
                     }
                     if (result.chatId) {
@@ -164,18 +187,33 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
                     break;
                 }
                 case 'chat/queryContext': {
-                    const result = await conn.sendRequest(rpc.chatQueryContext, message.data);
-                    sendToRenderer('chat/queryContext', result);
+                    try {
+                        const result = await conn.sendRequest(rpc.chatQueryContext, message.data);
+                        sendToRenderer('chat/queryContext', result);
+                    } catch (err) {
+                        console.warn('[Bridge] chat/queryContext failed, returning empty:', err);
+                        sendToRenderer('chat/queryContext', { contexts: [], requestId: message.data?.requestId });
+                    }
                     break;
                 }
                 case 'chat/queryCommands': {
-                    const result = await conn.sendRequest(rpc.chatQueryCommands, message.data);
-                    sendToRenderer('chat/queryCommands', result);
+                    try {
+                        const result = await conn.sendRequest(rpc.chatQueryCommands, message.data);
+                        sendToRenderer('chat/queryCommands', result);
+                    } catch (err) {
+                        console.warn('[Bridge] chat/queryCommands failed, returning empty:', err);
+                        sendToRenderer('chat/queryCommands', { commands: [], requestId: message.data?.requestId });
+                    }
                     break;
                 }
                 case 'chat/queryFiles': {
-                    const result = await conn.sendRequest(rpc.chatQueryFiles, message.data);
-                    sendToRenderer('chat/queryFiles', result);
+                    try {
+                        const result = await conn.sendRequest(rpc.chatQueryFiles, message.data);
+                        sendToRenderer('chat/queryFiles', result);
+                    } catch (err) {
+                        console.warn('[Bridge] chat/queryFiles failed, returning empty:', err);
+                        sendToRenderer('chat/queryFiles', { files: [], requestId: message.data?.requestId });
+                    }
                     break;
                 }
                 case 'chat/delete': {
@@ -373,17 +411,14 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
     // Sidebar -> Server (IPC from sidebar UI)
     // ============================================================
     ipcMain.on('chat-select', (_event, chatId: string) => {
-        const payload = chatPayloads.get(chatId);
-        if (payload) {
-            selectedChatId = chatId;
-            sendToRenderer('chat/opened', payload);
-            sendChatListUpdate();
-        }
+        selectedChatId = chatId;
+        sendToRenderer('chat/selectChat', chatId);
+        sendChatListUpdate();
     });
 
     ipcMain.on('chat-new', () => {
         selectedChatId = null;
-        sendToRenderer('chat/newChat', {});
+        sendToRenderer('chat/createNewChat', {});
         sendChatListUpdate();
     });
 

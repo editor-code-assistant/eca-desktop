@@ -88,11 +88,52 @@
     border-radius: 2px;
 }
 
+/* ── Workspace groups ── */
+.sidebar-workspace-group {
+    margin-bottom: 4px;
+}
+
+.sidebar-workspace-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--eca-item-selectable-fg);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    user-select: none;
+}
+
+.sidebar-workspace-group.active .sidebar-workspace-header {
+    color: var(--eca-accent-fg);
+}
+
+.sidebar-workspace-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: transparent;
+    flex-shrink: 0;
+}
+
+.sidebar-workspace-group.active .sidebar-workspace-indicator {
+    background: var(--eca-accent-fg);
+}
+
+.sidebar-workspace-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* ── Chat item ── */
 .sidebar-chat-item {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
+    padding: 10px 12px 10px 24px;
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.15s ease;
