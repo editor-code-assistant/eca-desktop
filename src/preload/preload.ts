@@ -21,6 +21,18 @@ ipcRenderer.on('sidebar-toggle', () => {
     sidebarToggleListeners.forEach(cb => cb());
 });
 
+// Session: list update listeners
+const sessionListListeners: MessageCallback[] = [];
+ipcRenderer.on('session-list-update', (_event, data) => {
+    sessionListListeners.forEach(cb => cb(data));
+});
+
+// Session: welcome data listeners
+const welcomeDataListeners: MessageCallback[] = [];
+ipcRenderer.on('welcome-data', (_event, data) => {
+    welcomeDataListeners.forEach(cb => cb(data));
+});
+
 // Expose API to the renderer via contextBridge
 contextBridge.exposeInMainWorld('ecaDesktop', {
     // ── Server message transport ──
@@ -65,5 +77,27 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
     },
     deleteChat: (chatId: string) => {
         ipcRenderer.send('chat-delete', chatId);
+    },
+
+    // ── Session management ──
+    createSession: (uri?: string) => {
+        ipcRenderer.send('session-create', { uri });
+    },
+    removeSession: (sessionId: string) => {
+        ipcRenderer.send('session-remove', { sessionId });
+    },
+    onSessionListUpdate: (callback: MessageCallback) => {
+        sessionListListeners.push(callback);
+    },
+    removeSessionListListener: (callback: MessageCallback) => {
+        const index = sessionListListeners.indexOf(callback);
+        if (index !== -1) sessionListListeners.splice(index, 1);
+    },
+    onWelcomeData: (callback: MessageCallback) => {
+        welcomeDataListeners.push(callback);
+    },
+    removeWelcomeDataListener: (callback: MessageCallback) => {
+        const index = welcomeDataListeners.indexOf(callback);
+        if (index !== -1) welcomeDataListeners.splice(index, 1);
     },
 });

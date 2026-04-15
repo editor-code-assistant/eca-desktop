@@ -204,6 +204,115 @@
     display: none;
 }
 
+/* ── Session status indicators ── */
+.sidebar-workspace-indicator.status-running {
+    background: #22c55e;
+}
+.sidebar-workspace-indicator.status-starting {
+    background: #eab308;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+.sidebar-workspace-indicator.status-failed {
+    background: #ef4444;
+}
+.sidebar-workspace-indicator.status-stopped {
+    background: var(--eca-item-selectable-fg);
+    opacity: 0.4;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* ── Workspace header actions ── */
+.sidebar-workspace-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.sidebar-workspace-header:hover .sidebar-workspace-actions {
+    opacity: 1;
+}
+
+.sidebar-workspace-action-btn {
+    background: none;
+    border: none;
+    color: var(--eca-item-selectable-fg);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, background 0.15s ease;
+    font-size: 14px;
+    line-height: 1;
+}
+.sidebar-workspace-action-btn:hover {
+    color: var(--eca-editor-fg);
+    background: var(--eca-base-hover);
+}
+.sidebar-workspace-action-btn svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+.sidebar-workspace-close:hover {
+    color: var(--eca-error-fg);
+}
+
+.sidebar-session-hint {
+    padding: 8px 24px;
+    font-size: 12px;
+    color: var(--eca-item-selectable-fg);
+    font-style: italic;
+}
+
+/* ── Bottom action bar ── */
+.sidebar-bottom-actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--eca-panel-border);
+}
+
+.sidebar-open-folder-btn {
+    -webkit-app-region: no-drag;
+    width: 100%;
+    background: none;
+    border: 1px dashed var(--eca-base-border);
+    border-radius: 8px;
+    color: var(--eca-item-selectable-fg);
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.sidebar-open-folder-btn:hover {
+    background: var(--eca-base-hover);
+    color: var(--eca-editor-fg);
+    border-color: var(--eca-editor-fg);
+}
+.sidebar-open-folder-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 /* ── Mobile drawer mode ── */
 @media (max-width: 767px) {
     .sidebar {

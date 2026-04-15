@@ -257,6 +257,29 @@ export interface EditorSaveClipboardImageResult {
     path: string;
 }
 
+// ── Session Management ──
+
+export interface SessionInfo {
+    id: string;
+    workspaceFolder: WorkspaceFolder;
+    status: string;
+}
+
+export interface SessionListUpdate {
+    sessions: SessionInfo[];
+    activeSessionId: string | null;
+}
+
+export interface RecentWorkspace {
+    uri: string;
+    name: string;
+    lastOpened: number;
+}
+
+export interface WelcomeData {
+    recentWorkspaces: RecentWorkspace[];
+}
+
 // ── IPC Message (renderer -> main) ──
 
 export type IpcMessageType =

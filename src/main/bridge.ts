@@ -3,21 +3,37 @@
 // ============================================================
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { EcaServer, EcaServerStatus } from './server';
+import { EcaServerStatus } from './server';
 import { ChatState } from './chat-state';
 import { dispatch, RouteContext } from './router';
-import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder } from './protocol';
+import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder, ChatEntry } from './protocol';
+import * as jsonrpc from 'vscode-jsonrpc/node';
 import * as rpc from './rpc';
+import { SessionManager, Session } from './session-manager';
+import { SessionStore } from './session-store';
 
-// Track MCP server state for the session
-const mcpServers: Record<string, ToolServerUpdatedParams> = {};
+// Track MCP server state per session
+const mcpServers = new Map<string, Record<string, ToolServerUpdatedParams>>();
 
 export function createBridge(
     mainWindow: BrowserWindow,
-    server: EcaServer,
-    workspaceFolders: WorkspaceFolder[] = [],
+    sessionManager: SessionManager,
+    sessionStore: SessionStore,
 ) {
-    const chatState = new ChatState(workspaceFolders);
+    // ── Helpers: resolve active session ──
+
+    function getActiveSession(): Session | undefined {
+        return sessionManager.getActiveSession();
+    }
+
+    function getActiveChatState(): ChatState | undefined {
+        return getActiveSession()?.chatState;
+    }
+
+    function getActiveConnection(): jsonrpc.MessageConnection | undefined {
+        const session = getActiveSession();
+        return session?.ecaServer.connection ?? undefined;
+    }
 
     // ── Helper: send to renderer ──
 
@@ -29,84 +45,121 @@ export function createBridge(
 
     function sendChatListUpdate(): void {
         if (!mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('chat-list-update', chatState.getChatListUpdate());
+            const allEntries: ChatEntry[] = [];
+            for (const session of sessionManager.getAllSessions()) {
+                const update = session.chatState.getChatListUpdate();
+                allEntries.push(...update.entries);
+            }
+            const activeChatState = getActiveChatState();
+            mainWindow.webContents.send('chat-list-update', {
+                entries: allEntries,
+                selectedId: activeChatState?.selectedChatId ?? null,
+                activeWorkspaceFolderName: getActiveSession()?.workspaceFolder.name ?? null,
+            });
         }
     }
 
-    // ── Server status ──
-
-    server.onStatusChanged = (status: EcaServerStatus) => {
-        sendToRenderer('server/statusChanged', status);
-    };
+    function sendSessionListUpdate(): void {
+        if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('session-list-update', sessionManager.getSessionInfoList());
+        }
+    }
 
     // ── Rehydration on reload ──
 
     mainWindow.webContents.on('did-finish-load', () => {
-        sendToRenderer('server/statusChanged', server.status);
+        const activeSession = getActiveSession();
+        if (activeSession) {
+            sendToRenderer('server/statusChanged', activeSession.ecaServer.status);
 
-        const servers = Object.values(mcpServers);
-        if (servers.length > 0) {
-            sendToRenderer('tool/serversUpdated', servers);
+            const sessionMcpData = mcpServers.get(activeSession.id);
+            if (sessionMcpData) {
+                sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+            }
         }
 
-        chatState.rehydrate(sendToRenderer, workspaceFolders);
+        // Rehydrate all sessions
+        for (const session of sessionManager.getAllSessions()) {
+            session.chatState.rehydrate(sendToRenderer, [session.workspaceFolder]);
+        }
+
         sendChatListUpdate();
+        sendSessionListUpdate();
     });
 
     // ── Server → Renderer (JSON-RPC notifications) ──
 
-    function registerServerNotifications(): void {
-        const conn = server.connection;
+    function registerServerNotifications(session: Session): void {
+        const conn = session.ecaServer.connection;
         if (!conn) return;
 
+        const sessionMcpServers: Record<string, ToolServerUpdatedParams> = {};
+        mcpServers.set(session.id, sessionMcpServers);
+
+        session.ecaServer.onStatusChanged = (status: EcaServerStatus) => {
+            // Only send status if this is the active session
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('server/statusChanged', status);
+            }
+            sendSessionListUpdate();
+        };
+
         conn.onNotification(rpc.chatContentReceived, (params) => {
-            chatState.pushContentEvent(params.chatId, params);
+            session.chatState.pushContentEvent(params.chatId, params);
             sendToRenderer('chat/contentReceived', params);
         });
 
         conn.onNotification(rpc.chatCleared, (params) => {
             if (params.messages) {
-                chatState.clearContentEvents(params.chatId);
+                session.chatState.clearContentEvents(params.chatId);
             }
             sendToRenderer('chat/cleared', params);
         });
 
         conn.onNotification(rpc.chatDeleted, (params) => {
             sendToRenderer('chat/deleted', params.chatId);
-            chatState.removeEntry(params.chatId);
+            session.chatState.removeEntry(params.chatId);
             sendChatListUpdate();
         });
 
         conn.onNotification(rpc.chatOpened, (params) => {
             sendToRenderer('chat/opened', params);
             if (params.chatId) {
-                chatState.addOrUpdateEntry(params.chatId, {
+                session.chatState.addOrUpdateEntry(params.chatId, {
                     title: params.title ?? 'New Chat',
                     status: params.status ?? 'idle',
                 });
-                chatState.cachePayload(params.chatId, params);
-                chatState.selectedChatId = params.chatId;
+                session.chatState.cachePayload(params.chatId, params);
+                session.chatState.selectedChatId = params.chatId;
+                sessionManager.activeSessionId = session.id;
                 sendChatListUpdate();
             }
         });
 
         conn.onNotification(rpc.chatStatusChanged, (params) => {
             sendToRenderer('chat/statusChanged', params);
-            chatState.updateStatus(params.chatId, params.status);
+            session.chatState.updateStatus(params.chatId, params.status);
             sendChatListUpdate();
         });
 
         conn.onNotification(rpc.toolServerUpdated, (params) => {
-            mcpServers[params.name] = params;
-            sendToRenderer('tool/serversUpdated', Object.values(mcpServers));
+            sessionMcpServers[params.name] = params;
+            // Only send MCP updates for active session
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('tool/serversUpdated', Object.values(sessionMcpServers));
+            }
         });
 
         conn.onNotification(rpc.configUpdated, (params) => {
-            sendToRenderer('config/updated', params);
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('config/updated', params);
+            }
         });
 
         conn.onNotification(rpc.providersUpdated, (params) => {
-            sendToRenderer('providers/updated', params);
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('providers/updated', params);
+            }
         });
 
         conn.onNotification(rpc.jobsUpdated, (params) => {
@@ -117,13 +170,15 @@ export function createBridge(
     // ── Renderer → Server (IPC dispatch) ──
 
     ipcMain.on('webview-message', async (_event, message: IpcMessage) => {
-        const conn = server.connection;
+        const session = getActiveSession();
+        const conn = session?.ecaServer.connection ?? null;
+
         if (!conn) {
-            console.error('[Bridge] No server connection, dropping message:', message.type);
+            console.error('[Bridge] No active server connection, dropping message:', message.type);
             return;
         }
 
-        if (server.status !== EcaServerStatus.Running && message.type !== 'webview/ready') {
+        if (session!.ecaServer.status !== EcaServerStatus.Running && message.type !== 'webview/ready') {
             console.warn('[Bridge] Server not ready, dropping message:', message.type);
             return;
         }
@@ -132,21 +187,19 @@ export function createBridge(
             conn,
             sendToRenderer,
             mainWindow,
-            chatState,
-            workspaceFolders,
+            chatState: session!.chatState,
+            workspaceFolders: [session!.workspaceFolder],
         };
 
         try {
-            // webview/ready is special — send status + workspace immediately
             if (message.type === 'webview/ready') {
-                sendToRenderer('server/statusChanged', server.status);
-                sendToRenderer('server/setWorkspaceFolders', workspaceFolders);
+                sendToRenderer('server/statusChanged', session!.ecaServer.status);
+                sendToRenderer('server/setWorkspaceFolders', [session!.workspaceFolder]);
                 return;
             }
 
             await dispatch(ctx, message);
 
-            // After any chat mutation, push updated sidebar list
             if (message.type.startsWith('chat/')) {
                 sendChatListUpdate();
             }
@@ -158,27 +211,51 @@ export function createBridge(
     // ── Sidebar IPC ──
 
     ipcMain.on('chat-select', (_event, chatId: string) => {
-        chatState.selectedChatId = chatId;
+        const session = sessionManager.getSessionForChat(chatId);
+        if (session) {
+            sessionManager.activeSessionId = session.id;
+            session.chatState.selectedChatId = chatId;
+
+            // Send the active session's workspace folders and server status
+            sendToRenderer('server/statusChanged', session.ecaServer.status);
+            sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
+
+            // Send MCP servers for the active session
+            const sessionMcpData = mcpServers.get(session.id);
+            if (sessionMcpData) {
+                sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+            }
+        }
         sendToRenderer('chat/selectChat', chatId);
         sendChatListUpdate();
     });
 
-    ipcMain.on('chat-new', () => {
-        chatState.selectedChatId = null;
+    ipcMain.on('chat-new', (_event, data?: { sessionId?: string }) => {
+        const targetSessionId = data?.sessionId ?? sessionManager.activeSessionId;
+        if (targetSessionId) {
+            const session = sessionManager.getSession(targetSessionId);
+            if (session) {
+                sessionManager.activeSessionId = session.id;
+                session.chatState.selectedChatId = null;
+            }
+        }
         sendToRenderer('chat/createNewChat', {});
         sendChatListUpdate();
     });
 
     ipcMain.on('chat-delete', async (_event, chatId: string) => {
-        const conn = server.connection;
-        if (conn) {
-            try {
-                await conn.sendRequest(rpc.chatDelete, { chatId });
-            } catch (err) {
-                console.error('[Bridge] Error deleting chat:', err);
+        const session = sessionManager.getSessionForChat(chatId);
+        if (session) {
+            const conn = session.ecaServer.connection;
+            if (conn) {
+                try {
+                    await conn.sendRequest(rpc.chatDelete, { chatId });
+                } catch (err) {
+                    console.error('[Bridge] Error deleting chat:', err);
+                }
             }
         }
     });
 
-    return { registerServerNotifications };
+    return { registerServerNotifications, sendSessionListUpdate, sendChatListUpdate };
 }

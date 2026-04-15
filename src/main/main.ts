@@ -1,10 +1,12 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'path';
 import { pathToFileURL } from 'url';
-import { EcaServer } from './server';
 import { createBridge } from './bridge';
 import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
+import { SessionManager } from './session-manager';
+import { SessionStore } from './session-store';
+import { WorkspaceFolder } from './protocol';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const WEBVIEW_DEV_URL = 'http://localhost:5173';
@@ -56,18 +58,110 @@ async function main(): Promise<void> {
 
   createMenu(mainWindow);
 
-  const cwd = process.cwd();
-  const workspaceFolders = [{ name: path.basename(cwd), uri: pathToFileURL(cwd).href }];
+  const sessionManager = new SessionManager();
+  const sessionStore = new SessionStore();
+  const bridge = createBridge(mainWindow, sessionManager, sessionStore);
 
-  const ecaServer = new EcaServer();
-  const bridge = createBridge(mainWindow, ecaServer, workspaceFolders);
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.send('welcome-data', {
+      recentWorkspaces: sessionStore.getRecents(),
+    });
+  });
 
-  try {
-    await ecaServer.start(workspaceFolders);
-    bridge.registerServerNotifications();
-  } catch (err) {
-    console.error('[Main] Failed to start ECA server:', err);
-  }
+  ipcMain.on('session-create', async (_event, data: { uri?: string }) => {
+    let folderPath: string | undefined;
+
+    if (data?.uri) {
+      // Direct URI provided (from recent workspaces)
+      try {
+        folderPath = new URL(data.uri).pathname;
+      } catch {
+        folderPath = data.uri;
+      }
+    } else {
+      // Open folder picker dialog
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory'],
+        title: 'Select Workspace Folder',
+      });
+      if (result.canceled || result.filePaths.length === 0) return;
+      folderPath = result.filePaths[0];
+    }
+
+    if (!folderPath) return;
+
+    const workspaceFolder: WorkspaceFolder = {
+      name: path.basename(folderPath),
+      uri: pathToFileURL(folderPath).href,
+    };
+
+    // Check if session already exists for this workspace
+    const existing = sessionManager.getAllSessions().find(
+      s => s.workspaceFolder.uri === workspaceFolder.uri
+    );
+    if (existing) {
+      sessionManager.activeSessionId = existing.id;
+      bridge.sendSessionListUpdate();
+      return;
+    }
+
+    const session = sessionManager.createSession(workspaceFolder);
+    sessionManager.activeSessionId = session.id;
+    sessionStore.addRecent({ uri: workspaceFolder.uri, name: workspaceFolder.name });
+
+    // Register notifications BEFORE starting so we capture status transitions
+    session.ecaServer.onStatusChanged = (status) => {
+      if (session.id === sessionManager.activeSessionId) {
+        mainWindow.webContents.send('server-message', {
+          type: 'server/statusChanged',
+          data: status,
+        });
+      }
+      bridge.sendSessionListUpdate();
+    };
+
+    bridge.sendSessionListUpdate();
+
+    try {
+      await session.ecaServer.start([workspaceFolder]);
+      bridge.registerServerNotifications(session);
+
+      // Server is now Running — send status + workspace to renderer
+      // (the webview/ready message was already handled before this session existed)
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('server-message', {
+          type: 'server/statusChanged',
+          data: session.ecaServer.status,
+        });
+        mainWindow.webContents.send('server-message', {
+          type: 'server/setWorkspaceFolders',
+          data: [session.workspaceFolder],
+        });
+      }
+    } catch (err) {
+      console.error('[Main] Failed to start ECA server for session:', err);
+    }
+
+    bridge.sendSessionListUpdate();
+  });
+
+  ipcMain.on('session-remove', (_event, data: { sessionId: string }) => {
+    // Notify renderer to clear each chat in this session before destroying it
+    const session = sessionManager.getSession(data.sessionId);
+    if (session) {
+      const { entries } = session.chatState.getChatListUpdate();
+      for (const entry of entries) {
+        mainWindow.webContents.send('server-message', {
+          type: 'chat/deleted',
+          data: entry.id,
+        });
+      }
+    }
+
+    sessionManager.removeSession(data.sessionId);
+    bridge.sendSessionListUpdate();
+    bridge.sendChatListUpdate();
+  });
 
   app.on('window-all-closed', () => {
     app.quit();
@@ -77,12 +171,7 @@ async function main(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) {
       const newWindow = createWindow();
       createMenu(newWindow);
-      const newBridge = createBridge(newWindow, ecaServer, workspaceFolders);
-      ecaServer.start(workspaceFolders).then(() => {
-        newBridge.registerServerNotifications();
-      }).catch(err => {
-        console.error('[Main] Failed to restart ECA server on activate:', err);
-      });
+      // Bridge and sessions are managed separately
     }
   });
 
@@ -111,7 +200,9 @@ async function main(): Promise<void> {
   }
 
   app.on('before-quit', async () => {
-    await ecaServer.stop();
+    for (const session of sessionManager.getAllSessions()) {
+      await session.ecaServer.stop();
+    }
   });
 }
 

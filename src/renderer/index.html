@@ -7,6 +7,7 @@
     <title>ECA Desktop</title>
     <link href="./theme.css" rel="stylesheet">
     <link href="./sidebar.css" rel="stylesheet">
+    <link href="./welcome.css" rel="stylesheet">
     <link href="../../eca-webview/dist/assets/index.css" rel="stylesheet">
     <style>
         /* macOS titlebar drag region — covers content area (sidebar has its own) */
@@ -53,11 +54,18 @@
                 </button>
             </div>
             <div id="sidebar-chat-list" class="sidebar-chat-list"></div>
+            <div class="sidebar-bottom-actions">
+                <button id="sidebar-open-folder" class="sidebar-open-folder-btn" title="New Session">
+                    <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    New Session
+                </button>
+            </div>
         </aside>
         <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
         <!-- Main content: eca-webview renders here -->
         <main class="app-content">
+            <div id="welcome-screen"></div>
             <div id="root"></div>
         </main>
     </div>
@@ -91,6 +99,9 @@
             });
         }
     </script>
+
+    <!-- Welcome screen logic -->
+    <script src="./welcome.js"></script>
 
     <!-- Sidebar logic (must run after ecaDesktop is available) -->
     <script src="./sidebar.js"></script>

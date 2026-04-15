@@ -1,0 +1,282 @@
+/* ═══════════════════════════════════════════════════
+ * ECA Desktop — Welcome Screen
+ * ═══════════════════════════════════════════════════ */
+
+@font-face {
+    font-family: 'Inter';
+    src: url('./fonts/Inter-Variable.woff2') format('woff2-variations');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+#welcome-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    background: var(--eca-editor-bg, #12121e);
+    animation: welcome-fade-in 0.4s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes welcome-fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Code Rain canvas ── */
+
+.welcome-rain {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.welcome-card {
+    position: relative;
+    z-index: 1;
+    max-width: 400px;
+    width: 100%;
+    padding: 0 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ── Logo ── */
+
+.welcome-logo {
+    margin-bottom: 32px;
+}
+
+.welcome-logo img {
+    width: 128px;
+    height: 128px;
+    opacity: 0.18;
+    user-select: none;
+    pointer-events: none;
+    filter: grayscale(10%);
+    transition: opacity 0.4s ease;
+}
+
+#welcome-screen:hover .welcome-logo img {
+    opacity: 0.28;
+}
+
+/* ── Header ── */
+
+.welcome-header {
+    text-align: center;
+    margin-bottom: 32px;
+    opacity: 0.85;
+}
+
+.welcome-title {
+    font-size: 28px;
+    font-weight: 300;
+    color: var(--eca-editor-fg);
+    margin: 0 0 10px;
+    letter-spacing: 2px;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: baseline;
+}
+
+/* Leading letters (E, C, A) — always bright */
+.welcome-title-lead {
+    color: var(--eca-editor-fg);
+    font-weight: 400;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    transition: letter-spacing 2s cubic-bezier(0.25, 0.1, 0.25, 1),
+                font-size 2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.welcome-title.collapsed .welcome-title-lead {
+    letter-spacing: 6px;
+    font-size: 32px;
+}
+
+/* Tail letters — fade & collapse */
+.welcome-title-tail {
+    display: inline-block;
+    color: var(--eca-item-selectable-fg);
+    opacity: 0.5;
+    max-width: 20em;
+    overflow: hidden;
+    transition: max-width 2s cubic-bezier(0.25, 0.1, 0.25, 1),
+                opacity 1.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.welcome-title.collapsed .welcome-title-tail {
+    max-width: 0;
+    opacity: 0;
+}
+
+/* Spaces between words — shrink away */
+.welcome-title-space {
+    display: inline-block;
+    max-width: 0.5em;
+    overflow: hidden;
+    transition: max-width 2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.welcome-title.collapsed .welcome-title-space {
+    max-width: 0;
+}
+
+.welcome-subtitle {
+    font-size: 14px;
+    color: var(--eca-item-selectable-fg);
+    margin: 0;
+    line-height: 1.6;
+    opacity: 0.7;
+    font-weight: 300;
+}
+
+/* ── Open Folder button ── */
+
+.welcome-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--eca-button-primary-fg, #fff);
+    background: var(--eca-button-primary-bg, #007a94);
+    border: 1px solid var(--eca-button-primary-border, rgba(255, 255, 255, 0.07));
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    margin-bottom: 32px;
+    letter-spacing: 0.1px;
+}
+
+.welcome-open-btn:hover {
+    background: var(--eca-button-primary-hover-bg, #00a5b8);
+}
+
+.welcome-open-btn:active {
+    background: var(--eca-button-primary-active-bg, #004d5e);
+}
+
+.welcome-open-btn svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+
+/* ── Keyboard shortcut hint ── */
+
+.welcome-hint {
+    font-size: 11px;
+    color: var(--eca-item-selectable-fg);
+    margin-top: -20px;
+    margin-bottom: 28px;
+    opacity: 0.6;
+}
+
+.welcome-hint kbd {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--eca-base-border);
+    background: var(--eca-input-bg);
+    color: var(--eca-editor-fg);
+}
+
+/* ── Divider ── */
+
+.welcome-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--eca-panel-border);
+    margin-bottom: 20px;
+}
+
+/* ── Recent Workspaces ── */
+
+.welcome-recents {
+    width: 100%;
+}
+
+.welcome-recents-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--eca-item-selectable-fg);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 8px;
+    padding: 0 8px;
+}
+
+.welcome-recents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.welcome-recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.welcome-recent-item:hover {
+    background: var(--eca-base-hover);
+}
+
+.welcome-recent-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.welcome-recent-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--eca-editor-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.welcome-recent-path {
+    font-size: 11.5px;
+    color: var(--eca-item-selectable-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+}
+
+.welcome-recent-time {
+    font-size: 11px;
+    color: var(--eca-item-selectable-fg);
+    white-space: nowrap;
+    margin-left: 16px;
+    flex-shrink: 0;
+    opacity: 0.6;
+}

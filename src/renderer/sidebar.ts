@@ -23,6 +23,17 @@ interface ChatListUpdate {
     activeWorkspaceFolderName: string | null;
 }
 
+interface SessionInfo {
+    id: string;
+    workspaceFolder: { name: string; uri: string };
+    status: string;
+}
+
+interface SessionListUpdate {
+    sessions: SessionInfo[];
+    activeSessionId: string | null;
+}
+
 interface EcaDesktopApi {
     send: (message: unknown) => void;
     onMessage: (callback: (message: unknown) => void) => void;
@@ -35,6 +46,9 @@ interface EcaDesktopApi {
     selectChat: (chatId: string) => void;
     newChat: () => void;
     deleteChat: (chatId: string) => void;
+    createSession: (uri?: string) => void;
+    removeSession: (sessionId: string) => void;
+    onSessionListUpdate: (callback: (data: SessionListUpdate) => void) => void;
 }
 
 declare global {
@@ -54,6 +68,8 @@ declare global {
     let entries: ChatEntry[] = [];
     let selectedId: string | null = null;
     let activeWorkspaceFolderName: string | null = null;
+    let sessions: SessionInfo[] = [];
+    let activeSessionId: string | null = null;
     let isOpen = false;
 
     // ── Helpers ──
@@ -109,45 +125,110 @@ declare global {
     // ── Render ──
 
     function render(): void {
-        if (entries.length === 0) {
+        newChatBtn.style.display = sessions.length > 0 ? '' : 'none';
+        chatList.innerHTML = '';
+
+        if (sessions.length === 0 && entries.length === 0) {
             chatList.innerHTML =
-                '<div class="sidebar-empty">No chats yet.<br>Start a conversation!</div>';
+                '<div class="sidebar-empty">No sessions yet.<br>Open a folder to start!</div>';
             return;
         }
 
-        chatList.innerHTML = '';
+        // If we have sessions, render workspace groups from sessions
+        if (sessions.length > 0) {
+            sessions.forEach((session) => {
+                const group = document.createElement('div');
+                group.className = 'sidebar-workspace-group';
+                if (session.id === activeSessionId) {
+                    group.classList.add('active');
+                }
 
-        const result = groupEntriesByWorkspace(entries);
+                // Workspace header
+                const header = document.createElement('div');
+                header.className = 'sidebar-workspace-header';
 
-        result.groupOrder.forEach((wsName) => {
-            const group = document.createElement('div');
-            group.className = 'sidebar-workspace-group';
-            if (wsName === activeWorkspaceFolderName) {
-                group.classList.add('active');
-            }
+                const indicator = document.createElement('span');
+                indicator.className = 'sidebar-workspace-indicator';
+                indicator.classList.add('status-' + session.status.toLowerCase());
 
-            // Workspace header
-            const header = document.createElement('div');
-            header.className = 'sidebar-workspace-header';
+                const name = document.createElement('span');
+                name.className = 'sidebar-workspace-name';
+                name.textContent = session.workspaceFolder.name;
+                name.title = session.workspaceFolder.uri;
 
-            const indicator = document.createElement('span');
-            indicator.className = 'sidebar-workspace-indicator';
+                const actions = document.createElement('div');
+                actions.className = 'sidebar-workspace-actions';
 
-            const name = document.createElement('span');
-            name.className = 'sidebar-workspace-name';
-            name.textContent = wsName;
+                const newChatInSession = document.createElement('button');
+                newChatInSession.className = 'sidebar-workspace-action-btn';
+                newChatInSession.title = 'New Chat';
+                newChatInSession.innerHTML = '<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+                newChatInSession.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.ecaDesktop?.newChat();
+                });
 
-            header.appendChild(indicator);
-            header.appendChild(name);
-            group.appendChild(header);
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'sidebar-workspace-action-btn sidebar-workspace-close';
+                closeBtn.title = 'Close session';
+                closeBtn.textContent = '\u00d7'; // ×
+                closeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.ecaDesktop?.removeSession(session.id);
+                });
 
-            // Chat items under this workspace
-            result.groups[wsName].forEach((entry) => {
-                group.appendChild(createChatItem(entry));
+                actions.appendChild(newChatInSession);
+                actions.appendChild(closeBtn);
+
+                header.appendChild(indicator);
+                header.appendChild(name);
+                header.appendChild(actions);
+                group.appendChild(header);
+
+                // Filter entries for this session's workspace
+                const sessionEntries = entries.filter(
+                    (e) => e.workspaceFolderName === session.workspaceFolder.name
+                );
+
+                sessionEntries.forEach((entry) => {
+                    group.appendChild(createChatItem(entry));
+                });
+
+                // If no chats yet, show hint
+                if (sessionEntries.length === 0) {
+                    const hint = document.createElement('div');
+                    hint.className = 'sidebar-session-hint';
+                    hint.textContent = 'No chats yet';
+                    group.appendChild(hint);
+                }
+
+                chatList.appendChild(group);
             });
+        } else {
+            // Fallback: just show entries grouped by workspace (old behavior)
+            const result = groupEntriesByWorkspace(entries);
+            result.groupOrder.forEach((wsName) => {
+                const group = document.createElement('div');
+                group.className = 'sidebar-workspace-group';
+                if (wsName === activeWorkspaceFolderName) group.classList.add('active');
 
-            chatList.appendChild(group);
-        });
+                const header = document.createElement('div');
+                header.className = 'sidebar-workspace-header';
+                const indicator = document.createElement('span');
+                indicator.className = 'sidebar-workspace-indicator';
+                const nameEl = document.createElement('span');
+                nameEl.className = 'sidebar-workspace-name';
+                nameEl.textContent = wsName;
+                header.appendChild(indicator);
+                header.appendChild(nameEl);
+                group.appendChild(header);
+
+                result.groups[wsName].forEach((entry) => {
+                    group.appendChild(createChatItem(entry));
+                });
+                chatList.appendChild(group);
+            });
+        }
     }
 
     // ── Mobile drawer ──
@@ -175,6 +256,13 @@ declare global {
         closeSidebar();
     });
 
+    const openFolderBtn = document.getElementById('sidebar-open-folder');
+    if (openFolderBtn) {
+        openFolderBtn.addEventListener('click', () => {
+            window.ecaDesktop?.createSession();
+        });
+    }
+
     overlay.addEventListener('click', closeSidebar);
 
     // ── IPC listeners ──
@@ -189,6 +277,12 @@ declare global {
 
         window.ecaDesktop.onSidebarToggle(() => {
             toggleSidebar();
+        });
+
+        window.ecaDesktop.onSessionListUpdate((data: SessionListUpdate) => {
+            sessions = data.sessions || [];
+            activeSessionId = data.activeSessionId;
+            render();
         });
     }
 
