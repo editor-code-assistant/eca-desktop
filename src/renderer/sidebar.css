@@ -1,0 +1,197 @@
+/* ═══════════════════════════════════════════════════
+ * ECA Desktop — Sidebar
+ * ═══════════════════════════════════════════════════ */
+
+/* ── App layout ── */
+.app-layout {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--eca-sidebar-bg, #0e0e1a);
+    border-right: 1px solid var(--eca-panel-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    -webkit-app-region: drag;
+}
+
+/* macOS: space for the traffic light buttons */
+.platform-darwin .sidebar-header {
+    padding-top: 46px;
+}
+
+.sidebar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--eca-editor-fg);
+    letter-spacing: 0.3px;
+}
+
+.sidebar-new-chat-btn {
+    -webkit-app-region: no-drag;
+    background: none;
+    border: 1px solid var(--eca-base-border);
+    border-radius: 6px;
+    color: var(--eca-editor-fg);
+    cursor: pointer;
+    padding: 5px 10px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+.sidebar-new-chat-btn:hover {
+    background: var(--eca-base-hover);
+}
+.sidebar-new-chat-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+/* ── Chat list ── */
+.sidebar-chat-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 8px;
+}
+
+.sidebar-chat-list::-webkit-scrollbar {
+    width: 4px;
+}
+.sidebar-chat-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-chat-list::-webkit-scrollbar-thumb {
+    background: var(--eca-base-border);
+    border-radius: 2px;
+}
+
+/* ── Chat item ── */
+.sidebar-chat-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    margin-bottom: 2px;
+}
+.sidebar-chat-item:hover {
+    background: var(--eca-base-hover);
+}
+.sidebar-chat-item.active {
+    background: var(--eca-input-bg);
+}
+
+.sidebar-chat-title {
+    flex: 1;
+    font-size: 13px;
+    color: var(--eca-editor-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+}
+
+/* Generating indicator — accent-colored title */
+.sidebar-chat-item.generating .sidebar-chat-title {
+    color: var(--eca-accent-fg);
+}
+
+/* Delete button — visible on hover */
+.sidebar-chat-delete {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--eca-item-selectable-fg);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    line-height: 1;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+.sidebar-chat-item:hover .sidebar-chat-delete {
+    opacity: 1;
+}
+.sidebar-chat-delete:hover {
+    color: var(--eca-error-fg);
+}
+
+/* Empty state */
+.sidebar-empty {
+    padding: 24px 16px;
+    color: var(--eca-item-selectable-fg);
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* ── Main content area ── */
+.app-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ── Sidebar overlay (hidden on desktop) ── */
+.sidebar-overlay {
+    display: none;
+}
+
+/* ── Mobile drawer mode ── */
+@media (max-width: 767px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 10001;
+        width: 280px;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: none;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        display: none;
+    }
+    .sidebar-overlay.visible {
+        display: block;
+    }
+}

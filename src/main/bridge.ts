@@ -5,6 +5,15 @@ import * as rpc from './rpc';
 // Track MCP server state for the session
 const mcpServers: Record<string, any> = {};
 
+// ============================================================
+// Chat list tracking for sidebar
+// ============================================================
+interface ChatEntry {
+    id: string;
+    title: string;
+    status: string;
+}
+
 export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
 
     // ============================================================
@@ -13,6 +22,22 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
     function sendToRenderer(type: string, data: any) {
         if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('server-message', { type, data });
+        }
+    }
+
+    // ============================================================
+    // Sidebar: chat list state
+    // ============================================================
+    const chatEntries = new Map<string, ChatEntry>();
+    const chatPayloads = new Map<string, any>();
+    let selectedChatId: string | null = null;
+
+    function sendChatListUpdate() {
+        if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('chat-list-update', {
+                entries: Array.from(chatEntries.values()).reverse(),
+                selectedId: selectedChatId,
+            });
         }
     }
 
@@ -41,14 +66,39 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
 
         conn.onNotification(rpc.chatDeleted, (params) => {
             sendToRenderer('chat/deleted', params.chatId);
+            // Remove from sidebar
+            chatEntries.delete(params.chatId);
+            chatPayloads.delete(params.chatId);
+            if (selectedChatId === params.chatId) {
+                selectedChatId = null;
+            }
+            sendChatListUpdate();
         });
 
         conn.onNotification(rpc.chatOpened, (params) => {
             sendToRenderer('chat/opened', params);
+            // Track in sidebar
+            const chatId = params.chatId;
+            if (chatId) {
+                chatEntries.set(chatId, {
+                    id: chatId,
+                    title: params.title || chatEntries.get(chatId)?.title || 'New Chat',
+                    status: params.status || 'idle',
+                });
+                chatPayloads.set(chatId, params);
+                selectedChatId = chatId;
+                sendChatListUpdate();
+            }
         });
 
         conn.onNotification(rpc.chatStatusChanged, (params) => {
             sendToRenderer('chat/statusChanged', params);
+            // Update sidebar status
+            const entry = chatEntries.get(params.chatId);
+            if (entry) {
+                entry.status = params.status;
+                sendChatListUpdate();
+            }
         });
 
         conn.onNotification(rpc.toolServerUpdated, (params) => {
@@ -83,6 +133,8 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
             switch (message.type) {
                 // --- Chat Requests (need response back to renderer) ---
                 case 'chat/userPrompt': {
+                    const isNewChat = !message.data.chatId;
+                    const promptText = message.data.prompt || '';
                     const result = await conn.sendRequest(rpc.chatPrompt, {
                         chatId: message.data.chatId,
                         message: message.data.prompt,
@@ -94,6 +146,21 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
                         contexts: message.data.contexts,
                     });
                     sendToRenderer('chat/newChat', { id: result.chatId });
+                    // Track in sidebar
+                    if (isNewChat && result.chatId) {
+                        const title = promptText.length > 50
+                            ? promptText.substring(0, 50) + '…'
+                            : (promptText || 'New Chat');
+                        chatEntries.set(result.chatId, {
+                            id: result.chatId,
+                            title,
+                            status: 'generating',
+                        });
+                    }
+                    if (result.chatId) {
+                        selectedChatId = result.chatId;
+                    }
+                    sendChatListUpdate();
                     break;
                 }
                 case 'chat/queryContext': {
@@ -286,11 +353,48 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
                     break;
                 }
 
+                // --- Sidebar toggle (from webview ChatHeader) ---
+                case 'editor/toggleSidebar': {
+                    if (!mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('sidebar-toggle');
+                    }
+                    break;
+                }
+
                 default:
                     console.warn('[Bridge] Unhandled message type:', message.type);
             }
         } catch (err) {
             console.error(`[Bridge] Error handling ${message.type}:`, err);
+        }
+    });
+
+    // ============================================================
+    // Sidebar -> Server (IPC from sidebar UI)
+    // ============================================================
+    ipcMain.on('chat-select', (_event, chatId: string) => {
+        const payload = chatPayloads.get(chatId);
+        if (payload) {
+            selectedChatId = chatId;
+            sendToRenderer('chat/opened', payload);
+            sendChatListUpdate();
+        }
+    });
+
+    ipcMain.on('chat-new', () => {
+        selectedChatId = null;
+        sendToRenderer('chat/newChat', {});
+        sendChatListUpdate();
+    });
+
+    ipcMain.on('chat-delete', async (_event, chatId: string) => {
+        const conn = server.connection;
+        if (conn) {
+            try {
+                await conn.sendRequest(rpc.chatDelete, { chatId });
+            } catch (err) {
+                console.error('[Bridge] Error deleting chat:', err);
+            }
         }
     });
 

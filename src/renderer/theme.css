@@ -78,13 +78,32 @@ html[data-editor="web"] {
   --eca-context-repo-map-fg: #b180d7;
   --eca-context-cursor-fg: #dcdcdc;
   --eca-context-mcp-resource-fg: #23d18b;
+
+  /* ── Sidebar ── */
+  --eca-sidebar-bg: #0e0e1a;
 }
 
-/* ── Desktop-specific layout ──
- *
- * Contexts area (@ file picker) is an editor-only feature — hide in desktop
- * since there is no file-picker integration yet.
- */
+/* ── Desktop-specific layout ── */
+
+/* Contexts area (@ file picker) — hide since there is no file-picker integration yet */
 [data-editor="web"] .prompt-area .contexts {
   display: none;
+}
+
+/* Hide webview's built-in chat-header on desktop — the sidebar replaces it */
+@media (min-width: 768px) {
+  [data-editor="web"] .chat-header {
+    display: none;
+  }
+}
+
+/* On mobile: hide tab row but show the title bar (for sidebar toggle) */
+@media (max-width: 767px) {
+  [data-editor="web"] .chat-header .chats,
+  [data-editor="web"] .chat-header .trust-toggle {
+    display: none;
+  }
+  [data-editor="web"] .chat-header .web-chat-title-bar {
+    display: flex;
+  }
 }
