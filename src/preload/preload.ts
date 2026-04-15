@@ -45,6 +45,18 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
     onSidebarToggle: (callback: VoidCallback) => {
         sidebarToggleListeners.push(callback);
     },
+    removeChatListListener: (callback: MessageCallback) => {
+        const index = chatListListeners.indexOf(callback);
+        if (index !== -1) {
+            chatListListeners.splice(index, 1);
+        }
+    },
+    removeSidebarToggleListener: (callback: VoidCallback) => {
+        const index = sidebarToggleListeners.indexOf(callback);
+        if (index !== -1) {
+            sidebarToggleListeners.splice(index, 1);
+        }
+    },
     selectChat: (chatId: string) => {
         ipcRenderer.send('chat-select', chatId);
     },

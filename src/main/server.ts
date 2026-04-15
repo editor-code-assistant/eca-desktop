@@ -5,6 +5,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as rpc from 'vscode-jsonrpc/node';
+import {
+    GITHUB_RELEASES_API,
+    GITHUB_RELEASES_DOWNLOAD,
+    USER_AGENT,
+    CLIENT_NAME,
+    CLIENT_VERSION,
+    PLATFORM_ARTIFACTS,
+    HTTP_TIMEOUT_MS,
+    DOWNLOAD_TIMEOUT_MS,
+    DOWNLOAD_MAX_RETRIES,
+    DOWNLOAD_RETRY_DELAY_MS,
+    getDataDir,
+} from './constants';
 
 export enum EcaServerStatus {
     Stopped = 'Stopped',
@@ -13,57 +26,67 @@ export enum EcaServerStatus {
     Failed = 'Failed',
 }
 
-const artifacts: Record<string, Record<string, string>> = {
-    darwin: {
-        x64: 'eca-native-macos-amd64.zip',
-        arm64: 'eca-native-macos-aarch64.zip',
-    },
-    linux: {
-        x64: 'eca-native-static-linux-amd64.zip',
-        arm64: 'eca-native-linux-aarch64.zip',
-    },
-    win32: {
-        x64: 'eca-native-windows-amd64.zip',
-    },
-};
-
-function getDataDir(): string {
-    const dir = path.join(os.homedir(), '.eca-desktop');
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-    return dir;
-}
-
 function fetchJson(url: string): Promise<any> {
     return new Promise((resolve, reject) => {
-        https.get(url, { headers: { 'User-Agent': 'eca-desktop' } }, (res) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+
+        const req = https.get(url, {
+            headers: { 'User-Agent': USER_AGENT },
+            signal: controller.signal as any,
+        }, (res) => {
             let data = '';
             res.on('data', (chunk: string) => { data += chunk; });
             res.on('end', () => {
-                try {
-                    resolve(JSON.parse(data));
-                } catch (err) {
-                    reject(err);
-                }
+                clearTimeout(timeout);
+                try { resolve(JSON.parse(data)); }
+                catch (err) { reject(err); }
             });
-        }).on('error', reject);
-    });
-}
-
-function downloadFile(url: string, destPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(destPath);
-        https.get(url, { headers: { 'User-Agent': 'eca-desktop' } }, (res) => {
-            res.pipe(file);
-            file.on('finish', () => {
-                file.close(() => resolve());
-            });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => {}); // Clean up partial file
+        });
+        req.on('error', (err) => {
+            clearTimeout(timeout);
             reject(err);
         });
     });
+}
+
+function downloadFileOnce(url: string, destPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
+        const file = fs.createWriteStream(destPath);
+        const req = https.get(url, {
+            headers: { 'User-Agent': USER_AGENT },
+            signal: controller.signal as any,
+        }, (res) => {
+            res.pipe(file);
+            file.on('finish', () => {
+                clearTimeout(timeout);
+                file.close(() => resolve());
+            });
+        });
+        req.on('error', (err) => {
+            clearTimeout(timeout);
+            fs.unlink(destPath, () => {});
+            reject(err);
+        });
+    });
+}
+
+async function downloadFile(url: string, destPath: string): Promise<void> {
+    for (let attempt = 0; attempt <= DOWNLOAD_MAX_RETRIES; attempt++) {
+        try {
+            return await downloadFileOnce(url, destPath);
+        } catch (err) {
+            if (attempt < DOWNLOAD_MAX_RETRIES) {
+                console.warn(`[Server] Download attempt ${attempt + 1} failed, retrying in ${DOWNLOAD_RETRY_DELAY_MS}ms...`);
+                await new Promise(r => setTimeout(r, DOWNLOAD_RETRY_DELAY_MS));
+            } else {
+                throw err;
+            }
+        }
+    }
 }
 
 export class EcaServer {
@@ -93,7 +116,7 @@ export class EcaServer {
     getArtifactName(): string {
         const platform = os.platform();
         const arch = os.arch();
-        const platformArtifacts = artifacts[platform];
+        const platformArtifacts = PLATFORM_ARTIFACTS[platform];
         if (!platformArtifacts) {
             throw new Error(`Unsupported platform: ${platform}`);
         }
@@ -111,7 +134,7 @@ export class EcaServer {
 
     async getLatestVersion(): Promise<string> {
         try {
-            const releases = await fetchJson('https://api.github.com/repos/editor-code-assistant/eca/releases');
+            const releases = await fetchJson(GITHUB_RELEASES_API);
             return releases[0]?.tag_name ?? '';
         } catch {
             return '';
@@ -134,7 +157,7 @@ export class EcaServer {
 
     async downloadServer(version: string): Promise<void> {
         const artifactName = this.getArtifactName();
-        const downloadUrl = `https://github.com/editor-code-assistant/eca/releases/download/${version}/${artifactName}`;
+        const downloadUrl = `${GITHUB_RELEASES_DOWNLOAD}/${version}/${artifactName}`;
         const dataDir = getDataDir();
         const zipPath = path.join(dataDir, artifactName);
 
@@ -217,7 +240,7 @@ export class EcaServer {
 
             const initResult = await this._connection.sendRequest('initialize', {
                 processId: process.pid,
-                clientInfo: { name: 'Desktop', version: '0.1.0' },
+                clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
                 capabilities: {
                     codeAssistant: { chat: true },
                 },

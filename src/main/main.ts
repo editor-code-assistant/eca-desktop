@@ -75,7 +75,14 @@ async function main(): Promise<void> {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      const newWindow = createWindow();
+      createMenu(newWindow);
+      const newBridge = createBridge(newWindow, ecaServer, workspaceFolders);
+      ecaServer.start(workspaceFolders).then(() => {
+        newBridge.registerServerNotifications();
+      }).catch(err => {
+        console.error('[Main] Failed to restart ECA server on activate:', err);
+      });
     }
   });
 

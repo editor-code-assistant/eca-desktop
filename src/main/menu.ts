@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
+import { DOCS_URL, ISSUES_URL } from './constants';
 
 export function createMenu(mainWindow: BrowserWindow) {
     const isMac = process.platform === 'darwin';
@@ -90,13 +91,13 @@ export function createMenu(mainWindow: BrowserWindow) {
                 {
                     label: 'ECA Documentation',
                     click: () => {
-                        shell.openExternal('https://eca.dev');
+                        shell.openExternal(DOCS_URL);
                     },
                 },
                 {
                     label: 'Report Issue',
                     click: () => {
-                        shell.openExternal('https://github.com/editor-code-assistant/eca-desktop/issues');
+                        shell.openExternal(ISSUES_URL);
                     },
                 },
             ],
