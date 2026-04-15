@@ -16,7 +16,7 @@ interface ChatEntry {
     workspaceFolderName: string;
 }
 
-export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
+export function createBridge(mainWindow: BrowserWindow, server: EcaServer, workspaceFolders: { name: string; uri: string }[] = []) {
 
     // ============================================================
     // Helper to send messages to the renderer
@@ -32,8 +32,9 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
     // ============================================================
     const chatEntries = new Map<string, ChatEntry>();
     const chatPayloads = new Map<string, any>();
+    const chatContentEvents = new Map<string, any[]>();
     let selectedChatId: string | null = null;
-    const workspaceFolderName = path.basename(process.cwd());
+    const workspaceFolderName = workspaceFolders[0]?.name || path.basename(process.cwd());
 
     function sendChatListUpdate() {
         if (!mainWindow.isDestroyed()) {
@@ -65,6 +66,24 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
             sendToRenderer('tool/serversUpdated', servers);
         }
 
+        // Re-send workspace folders so the webview has them after reload
+        sendToRenderer('server/setWorkspaceFolders', workspaceFolders);
+
+        // Re-hydrate chats: re-open each chat shell, then batch-replay content
+        for (const [, payload] of chatPayloads) {
+            sendToRenderer('chat/opened', payload);
+        }
+        for (const [, events] of chatContentEvents) {
+            if (events.length > 0) {
+                sendToRenderer('chat/batchContentReceived', events);
+            }
+        }
+
+        // Restore the selected chat if it still exists
+        if (selectedChatId && chatPayloads.has(selectedChatId)) {
+            sendToRenderer('chat/selectChat', selectedChatId);
+        }
+
         // Re-send sidebar chat list
         sendChatListUpdate();
     });
@@ -78,18 +97,27 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
         if (!conn) return;
 
         conn.onNotification(rpc.chatContentReceived, (params) => {
+            // Cache for replay after webview reload
+            const events = chatContentEvents.get(params.chatId) || [];
+            events.push(params);
+            chatContentEvents.set(params.chatId, events);
+
             sendToRenderer('chat/contentReceived', params);
         });
 
         conn.onNotification(rpc.chatCleared, (params) => {
+            if (params.messages) {
+                chatContentEvents.delete(params.chatId);
+            }
             sendToRenderer('chat/cleared', params);
         });
 
         conn.onNotification(rpc.chatDeleted, (params) => {
             sendToRenderer('chat/deleted', params.chatId);
-            // Remove from sidebar
+            // Remove from sidebar and content cache
             chatEntries.delete(params.chatId);
             chatPayloads.delete(params.chatId);
+            chatContentEvents.delete(params.chatId);
             if (selectedChatId === params.chatId) {
                 selectedChatId = null;
             }
@@ -151,8 +179,18 @@ export function createBridge(mainWindow: BrowserWindow, server: EcaServer) {
             return;
         }
 
+        if (server.status !== EcaServerStatus.Running) {
+            console.warn('[Bridge] Server not ready, dropping message:', message.type);
+            return;
+        }
+
         try {
             switch (message.type) {
+                case 'webview/ready': {
+                    sendToRenderer('server/statusChanged', server.status);
+                    sendToRenderer('server/setWorkspaceFolders', workspaceFolders);
+                    break;
+                }
                 // --- Chat Requests (need response back to renderer) ---
                 case 'chat/userPrompt': {
                     const isNewChat = !message.data.chatId;

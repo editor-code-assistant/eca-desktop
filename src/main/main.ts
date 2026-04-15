@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { EcaServer } from './server';
 import { createBridge } from './bridge';
 import { createMenu } from './menu';
@@ -55,11 +56,14 @@ async function main(): Promise<void> {
 
   createMenu(mainWindow);
 
+  const cwd = process.cwd();
+  const workspaceFolders = [{ name: path.basename(cwd), uri: pathToFileURL(cwd).href }];
+
   const ecaServer = new EcaServer();
-  const bridge = createBridge(mainWindow, ecaServer);
+  const bridge = createBridge(mainWindow, ecaServer, workspaceFolders);
 
   try {
-    await ecaServer.start();
+    await ecaServer.start(workspaceFolders);
     bridge.registerServerNotifications();
   } catch (err) {
     console.error('[Main] Failed to start ECA server:', err);

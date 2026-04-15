@@ -181,7 +181,7 @@ export class EcaServer {
         return binaryPath;
     }
 
-    async start(): Promise<void> {
+    async start(workspaceFolders: { name: string; uri: string }[] = []): Promise<void> {
         this.setStatus(EcaServerStatus.Starting);
 
         try {
@@ -221,7 +221,7 @@ export class EcaServer {
                 capabilities: {
                     codeAssistant: { chat: true },
                 },
-                workspaceFolders: [],
+                workspaceFolders,
             });
 
             this.onLog(`ECA server initialized: ${JSON.stringify(initResult)}`);
