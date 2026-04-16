@@ -6,7 +6,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { EcaServerStatus } from './server';
 import { ChatState, PENDING_CHAT_ID } from './chat-state';
 import { dispatch, RouteContext } from './router';
-import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder, ChatEntry } from './protocol';
+import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder, ChatEntry, AskQuestionResult } from './protocol';
 import * as jsonrpc from 'vscode-jsonrpc/node';
 import * as rpc from './rpc';
 import { SessionManager, Session } from './session-manager';
@@ -20,6 +20,13 @@ export function createBridge(
     sessionManager: SessionManager,
     sessionStore: SessionStore,
 ) {
+    // ── Pending askQuestion requests ──
+
+    let nextAskQuestionId = 1;
+    const pendingQuestions = new Map<string, {
+        resolve: (result: AskQuestionResult) => void;
+    }>();
+
     // ── Helpers: resolve active session ──
 
     function getActiveSession(): Session | undefined {
@@ -137,14 +144,23 @@ export function createBridge(
         conn.onNotification(rpc.chatOpened, (params) => {
             sendToRenderer('chat/opened', params);
             if (params.chatId) {
-                session.chatState.addOrUpdateEntry(params.chatId, {
-                    title: params.title ?? 'New Chat',
-                    status: params.status ?? 'idle',
-                });
+                // Track subagent chats so they never appear in the sidebar
+                if (params.parentChatId) {
+                    session.chatState.markAsSubagent(params.chatId);
+                }
+
                 session.chatState.cachePayload(params.chatId, params);
-                session.chatState.selectedChatId = params.chatId;
-                sessionManager.activeSessionId = session.id;
-                sendChatListUpdate();
+
+                // Only add sidebar entry and change selection for non-subagent chats
+                if (!session.chatState.isSubagent(params.chatId)) {
+                    session.chatState.addOrUpdateEntry(params.chatId, {
+                        title: params.title ?? 'New Chat',
+                        status: params.status ?? 'idle',
+                    });
+                    session.chatState.selectedChatId = params.chatId;
+                    sessionManager.activeSessionId = session.id;
+                    sendChatListUpdate();
+                }
             }
         });
 
@@ -177,6 +193,16 @@ export function createBridge(
         conn.onNotification(rpc.jobsUpdated, (params) => {
             sendToRenderer('jobs/updated', params);
         });
+
+        // ── chat/askQuestion (server → client request) ──
+
+        conn.onRequest(rpc.chatAskQuestion, async (params) => {
+            const requestId = `ask-${nextAskQuestionId++}`;
+            return new Promise<AskQuestionResult>((resolve) => {
+                pendingQuestions.set(requestId, { resolve });
+                sendToRenderer('chat/askQuestion', { ...params, requestId });
+            });
+        });
     }
 
     // ── Renderer → Server (IPC dispatch) ──
@@ -207,6 +233,23 @@ export function createBridge(
             if (message.type === 'webview/ready') {
                 sendToRenderer('server/statusChanged', session!.ecaServer.status);
                 sendToRenderer('server/setWorkspaceFolders', [session!.workspaceFolder]);
+                return;
+            }
+
+            // Handle chat/answerQuestion locally — resolve the pending promise
+            if (message.type === 'chat/answerQuestion') {
+                const { requestId, answer, cancelled } = message.data as {
+                    requestId: string;
+                    answer: string | null;
+                    cancelled: boolean;
+                };
+                const pending = pendingQuestions.get(requestId);
+                if (pending) {
+                    pendingQuestions.delete(requestId);
+                    pending.resolve({ answer: answer ?? null, cancelled: !!cancelled });
+                } else {
+                    console.warn('[Bridge] No pending question for requestId:', requestId);
+                }
                 return;
             }
 

@@ -243,6 +243,7 @@ export class EcaServer {
                 clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
                 capabilities: {
                     codeAssistant: { chat: true },
+                    chatCapabilities: { askQuestion: true },
                 },
                 workspaceFolders,
             });

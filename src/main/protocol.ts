@@ -29,7 +29,10 @@ export interface ChatListUpdate {
 export interface InitializeParams {
     processId: number;
     clientInfo: { name: string; version: string };
-    capabilities: { codeAssistant: { chat: boolean } };
+    capabilities: {
+        codeAssistant: { chat: boolean };
+        chatCapabilities?: { askQuestion?: boolean };
+    };
     workspaceFolders: WorkspaceFolder[];
 }
 
@@ -116,6 +119,7 @@ export interface QueryFilesResult {
 
 export interface ChatContentReceivedParams {
     chatId: string;
+    parentChatId?: string;
     [key: string]: unknown;
 }
 
@@ -133,6 +137,7 @@ export interface ChatOpenedParams {
     chatId: string;
     title?: string;
     status?: string;
+    parentChatId?: string;
     [key: string]: unknown;
 }
 
@@ -164,6 +169,26 @@ export interface ChatModelChangedParams {
 export interface ChatAgentChangedParams {
     chatId: string;
     [key: string]: unknown;
+}
+
+// ── Chat Ask Question (server → client request) ──
+
+export interface AskQuestionOption {
+    label: string;
+    description?: string;
+}
+
+export interface AskQuestionParams {
+    chatId: string;
+    question: string;
+    options: AskQuestionOption[];
+    toolCallId?: string;
+    allowFreeform?: boolean;
+}
+
+export interface AskQuestionResult {
+    answer: string | null;
+    cancelled: boolean;
 }
 
 // ── MCP ──
@@ -300,6 +325,7 @@ export type IpcMessageType =
     | 'chat/promptSteer'
     | 'chat/selectedModelChanged'
     | 'chat/selectedAgentChanged'
+    | 'chat/answerQuestion'
     | 'mcp/startServer'
     | 'mcp/stopServer'
     | 'mcp/connectServer'

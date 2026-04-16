@@ -19,6 +19,7 @@ import {
     ChatSteerParams,
     ChatModelChangedParams,
     ChatAgentChangedParams,
+    AskQuestionParams, AskQuestionResult,
     McpServerNameParams,
     McpUpdateServerParams, McpUpdateServerResult,
     ToolServerUpdatedParams,
@@ -66,6 +67,10 @@ export const chatPromptStop = new rpc.NotificationType<ChatPromptStopParams>('ch
 export const chatPromptSteer = new rpc.NotificationType<ChatSteerParams>('chat/promptSteer');
 export const chatSelectedModelChanged = new rpc.NotificationType<ChatModelChangedParams>('chat/selectedModelChanged');
 export const chatSelectedAgentChanged = new rpc.NotificationType<ChatAgentChangedParams>('chat/selectedAgentChanged');
+
+// ── Chat — Requests (server → client) ──
+
+export const chatAskQuestion = new rpc.RequestType<AskQuestionParams, AskQuestionResult, void>('chat/askQuestion');
 
 // ── MCP ──
 
