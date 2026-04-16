@@ -235,13 +235,19 @@ declare global {
 
     function render(): void {
         if (hasSessions) {
-            welcomeScreen.style.display = 'none';
             root.style.display = '';
-            document.body.classList.remove('welcome-active');
-            stopRain();
+            const logo = welcomeScreen.querySelector('.welcome-logo img') as HTMLElement;
+            if (logo) logo.style.animation = 'none';
+            welcomeScreen.classList.add('fade-out');
+            setTimeout(() => {
+                welcomeScreen.style.display = 'none';
+                document.body.classList.remove('welcome-active');
+                stopRain();
+            }, 150);
             return;
         }
 
+        welcomeScreen.classList.remove('fade-out');
         document.body.classList.add('welcome-active');
         welcomeScreen.style.display = 'flex';
         root.style.display = 'none';

@@ -1,1 +1,1 @@
-- `npm run start` starts the project
+- `npm run dev` starts the project listening to changes
