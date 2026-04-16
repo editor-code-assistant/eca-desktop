@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n webview,electron \"cd eca-webview && npm run dev\" \"wait-on http://localhost:5173 && NODE_ENV=development electron .\"",
-    "build:webview": "cd eca-webview && npm ci && npm run build",
+    "build:webview": "cd eca-webview && npm ci --registry https://registry.npmjs.org/ && npm run build",
     "build:main": "esbuild src/main/main.ts --bundle --platform=node --outfile=dist/main.js --external:electron --external:vscode-jsonrpc",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --outfile=dist/preload.js --external:electron",
     "build:sidebar": "esbuild src/renderer/sidebar.ts --bundle --outfile=src/renderer/sidebar.js",
