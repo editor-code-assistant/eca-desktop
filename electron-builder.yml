@@ -1,5 +1,6 @@
 appId: dev.eca.desktop
 productName: ECA
+artifactName: eca-${arch}.${ext}
 
 directories:
   output: release
