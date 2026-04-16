@@ -137,18 +137,20 @@ html[data-editor="web"] {
     background: var(--eca-panel-bg);
     box-shadow: none;
   }
-  /* State borders — ordered by priority (last wins when multiple apply):
+  /* State borders — dimmed to low alpha via color-mix so the prompt
+     signals its state without pulling user attention. Ordered by
+     priority (last wins when multiple apply):
      focused (teal) < running (yellow) < waiting-approval (orange) */
   [data-editor="web"] .prompt-area.focused {
-    border-color: var(--eca-link-fg);
+    border-color: color-mix(in srgb, var(--eca-link-fg) 35%, transparent);
     box-shadow: none;
   }
   [data-editor="web"] .prompt-area.running {
-    border-color: var(--eca-warning-fg, #cca700);
+    border-color: color-mix(in srgb, var(--eca-warning-fg, #cca700) 35%, transparent);
     box-shadow: none;
   }
   [data-editor="web"] .prompt-area.waiting-approval {
-    border-color: var(--eca-approval-fg, #e8850c);
+    border-color: color-mix(in srgb, var(--eca-approval-fg, #e8850c) 35%, transparent);
     box-shadow: none;
   }
   [data-editor="web"] .prompt-area .field {
