@@ -12,8 +12,10 @@ import * as rpc from './rpc';
 import { SessionManager, Session } from './session-manager';
 import { SessionStore } from './session-store';
 
-// Track MCP server state per session
+// Track MCP server, config and providers state per session
 const mcpServers = new Map<string, Record<string, ToolServerUpdatedParams>>();
+const configCache = new Map<string, unknown>();
+const providersCache = new Map<string, unknown>();
 
 export function createBridge(
     mainWindow: BrowserWindow,
@@ -82,6 +84,17 @@ export function createBridge(
             const sessionMcpData = mcpServers.get(activeSession.id);
             if (sessionMcpData) {
                 sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+            }
+
+            // Replay config and providers so the webview knows about models, etc.
+            const cachedConfig = configCache.get(activeSession.id);
+            if (cachedConfig) {
+                sendToRenderer('config/updated', cachedConfig);
+            }
+
+            const cachedProviders = providersCache.get(activeSession.id);
+            if (cachedProviders) {
+                sendToRenderer('providers/updated', cachedProviders);
             }
         }
 
@@ -179,12 +192,14 @@ export function createBridge(
         });
 
         conn.onNotification(rpc.configUpdated, (params) => {
+            configCache.set(session.id, params);
             if (session.id === sessionManager.activeSessionId) {
                 sendToRenderer('config/updated', params);
             }
         });
 
         conn.onNotification(rpc.providersUpdated, (params) => {
+            providersCache.set(session.id, params);
             if (session.id === sessionManager.activeSessionId) {
                 sendToRenderer('providers/updated', params);
             }
@@ -263,6 +278,28 @@ export function createBridge(
         }
     });
 
+    // ── Helpers: send full session context to renderer ──
+
+    function sendSessionContext(session: Session): void {
+        sendToRenderer('server/statusChanged', session.ecaServer.status);
+        sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
+
+        const sessionMcpData = mcpServers.get(session.id);
+        if (sessionMcpData) {
+            sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+        }
+
+        const cachedConfig = configCache.get(session.id);
+        if (cachedConfig) {
+            sendToRenderer('config/updated', cachedConfig);
+        }
+
+        const cachedProviders = providersCache.get(session.id);
+        if (cachedProviders) {
+            sendToRenderer('providers/updated', cachedProviders);
+        }
+    }
+
     // ── Sidebar IPC ──
 
     ipcMain.on('chat-select', (_event, chatId: string) => {
@@ -271,12 +308,7 @@ export function createBridge(
             const session = sessionManager.getSessionForChat(chatId);
             if (session) {
                 sessionManager.activeSessionId = session.id;
-                sendToRenderer('server/statusChanged', session.ecaServer.status);
-                sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
-                const sessionMcpData = mcpServers.get(session.id);
-                if (sessionMcpData) {
-                    sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
-                }
+                sendSessionContext(session);
             }
             sendToRenderer('chat/createNewChat', {});
             sendChatListUpdate();
@@ -292,16 +324,7 @@ export function createBridge(
         if (session) {
             sessionManager.activeSessionId = session.id;
             session.chatState.selectedChatId = chatId;
-
-            // Send the active session's workspace folders and server status
-            sendToRenderer('server/statusChanged', session.ecaServer.status);
-            sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
-
-            // Send MCP servers for the active session
-            const sessionMcpData = mcpServers.get(session.id);
-            if (sessionMcpData) {
-                sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
-            }
+            sendSessionContext(session);
         }
         sendToRenderer('chat/selectChat', chatId);
         sendChatListUpdate();
@@ -319,15 +342,7 @@ export function createBridge(
             if (session) {
                 sessionManager.activeSessionId = session.id;
                 session.chatState.addPendingNewChat();
-
-                // Notify webview about the session context switch
-                sendToRenderer('server/statusChanged', session.ecaServer.status);
-                sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
-
-                const sessionMcpData = mcpServers.get(session.id);
-                if (sessionMcpData) {
-                    sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
-                }
+                sendSessionContext(session);
             }
         }
         sendToRenderer('chat/createNewChat', {});
