@@ -49,3 +49,15 @@ jobs:
         run: npx electron-builder --linux --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish draft release
+        run: gh release edit ${{ github.ref_name }} --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
