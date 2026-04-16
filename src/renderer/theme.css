@@ -4,28 +4,28 @@
  * but none for "web". Since eca-desktop sets editor = "web", we must
  * provide all --eca-* variables here.
  *
- * Palette sourced from eca-web's web-theme.css.
+ * Palette: "Carbon" — pure neutral gray base with ECA teal accent.
  */
 html[data-editor="web"] {
   /* ── Core surfaces ── */
-  --eca-editor-bg: #12121e;
+  --eca-editor-bg: #0c0c0c;
   --eca-editor-fg: #e0e4ea;
-  --eca-base-bg: #12121e;
+  --eca-base-bg: #0c0c0c;
   --eca-fg: #e0e4ea;
   --eca-accent-fg: #00a5b8;
 
   /* ── Panels ── */
-  --eca-panel-bg: #1a1a2e;
-  --eca-panel-border: #2a2a3e;
+  --eca-panel-bg: #151515;
+  --eca-panel-border: #262626;
 
   /* ── Inputs ── */
-  --eca-input-bg: #22223a;
+  --eca-input-bg: #1a1a1a;
   --eca-input-fg: #e0e4ea;
-  --eca-input-placeholder-fg: #5a6a7a;
+  --eca-input-placeholder-fg: #6b7280;
 
   /* ── Borders & hover ── */
-  --eca-base-border: #2a2a3e;
-  --eca-base-hover: #2a2a3e;
+  --eca-base-border: #262626;
+  --eca-base-hover: #262626;
 
   /* ── Links ── */
   --eca-link-fg: #00a5b8;
@@ -40,17 +40,17 @@ html[data-editor="web"] {
   --eca-confirm-action-fg: #f8f8f8;
 
   /* ── Diffs ── */
-  --eca-diff-unchanged-bg: rgba(116, 116, 116, 0.16);
-  --eca-diff-insert-bg: rgba(156, 204, 44, 0.2);
-  --eca-diff-delete-bg: rgba(255, 0, 0, 0.2);
+  --eca-diff-unchanged-bg: rgba(128, 128, 128, 0.1);
+  --eca-diff-insert-bg: rgba(74, 222, 128, 0.15);
+  --eca-diff-delete-bg: rgba(248, 113, 113, 0.15);
 
   /* ── Misc UI ── */
-  --eca-item-selectable-fg: #8a9ab0;
-  --eca-tooltip-bg: #1a1a2e;
+  --eca-item-selectable-fg: #8a8f98;
+  --eca-tooltip-bg: #151515;
   --eca-tooltip-fg: #e0e4ea;
 
   /* ── Toggles ── */
-  --eca-toggle-slider-bg: #5a6a7a;
+  --eca-toggle-slider-bg: #6b7280;
   --eca-toggle-icon-bg: #ffffff;
   --eca-toggle-bg: #007a94;
 
@@ -64,9 +64,9 @@ html[data-editor="web"] {
   /* ── Secondary buttons ── */
   --eca-button-secondary-fg: #e0e4ea;
   --eca-button-secondary-bg: transparent;
-  --eca-button-secondary-border: #2a2a3e;
-  --eca-button-secondary-hover-bg: #22223a;
-  --eca-button-secondary-active-bg: #2a2a3e;
+  --eca-button-secondary-border: #262626;
+  --eca-button-secondary-hover-bg: #1a1a1a;
+  --eca-button-secondary-active-bg: #262626;
 
   /* ── Fonts ── */
   --eca-icon-font-family: codicon;
@@ -80,7 +80,7 @@ html[data-editor="web"] {
   --eca-context-mcp-resource-fg: #23d18b;
 
   /* ── Sidebar ── */
-  --eca-sidebar-bg: #0e0e1a;
+  --eca-sidebar-bg: #080808;
 }
 
 /* ═══════════════════════════════════════════════════

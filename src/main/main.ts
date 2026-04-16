@@ -26,7 +26,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
     frame: process.platform === 'darwin' ? false : true,
-    backgroundColor: '#1e1e2e',
+    backgroundColor: '#0c0c0c',
     icon: path.join(__dirname, '../resources/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

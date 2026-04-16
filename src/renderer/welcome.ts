@@ -151,7 +151,7 @@ declare global {
                 if (j === visible.length - 1) {
                     rainCtx.fillStyle = `rgba(0, 200, 220, ${Math.min(alpha * 3, 0.6)})`;
                 } else {
-                    rainCtx.fillStyle = `rgba(180, 200, 220, ${alpha})`;
+                    rainCtx.fillStyle = `rgba(195, 200, 205, ${alpha})`;
                 }
 
                 rainCtx.fillText(visible[j], col.x, col.y + j * lineH);
