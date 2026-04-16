@@ -187,24 +187,39 @@ async function main(): Promise<void> {
     setupAutoUpdater(mainWindow);
   }
 
-  // Dev mode: watch renderer files and auto-reload the window
+  // Dev mode: watch renderer + webview dist files and auto-reload the window
   if (!app.isPackaged) {
     const fs = require('fs');
-    const rendererDir = path.join(__dirname, '../src/renderer');
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
-    fs.watch(rendererDir, { recursive: true }, (_event: string, filename: string) => {
-      if (!filename) return;
-      // Debounce: multiple changes fire rapidly, reload once
+    const scheduleReload = (source: string, filename: string) => {
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = setTimeout(() => {
-        console.log(`[Dev] Renderer file changed: ${filename}, reloading…`);
+        console.log(`[Dev] ${source} file changed: ${filename}, reloading…`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.reload();
         }
-      }, 300);
+      }, 500);
+    };
+
+    // Watch renderer files (sidebar, welcome, theme, index.html)
+    const rendererDir = path.join(__dirname, '../src/renderer');
+    fs.watch(rendererDir, { recursive: true }, (_event: string, filename: string) => {
+      if (!filename) return;
+      scheduleReload('Renderer', filename);
     });
-    console.log('[Dev] Watching renderer files for live reload');
+
+    // Watch webview dist (vite build --watch output)
+    const webviewDistDir = path.join(__dirname, '../eca-webview/dist/assets');
+    fs.watch(webviewDistDir, (_event: string, filename: string) => {
+      if (!filename) return;
+      // Only reload on JS/CSS changes, not intermediate files
+      if (filename.endsWith('.js') || filename.endsWith('.css')) {
+        scheduleReload('Webview', filename);
+      }
+    });
+
+    console.log('[Dev] Watching renderer + webview files for live reload');
   }
 
   app.on('before-quit', async () => {
