@@ -2,7 +2,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
     {
-        ignores: ['dist/**', 'node_modules/**', 'eca-webview/**'],
+        ignores: ['dist/**', 'node_modules/**', 'eca-webview/**', 'src/renderer/*.js'],
     },
     ...tseslint.configs.strict,
     {

@@ -2,8 +2,22 @@
 
 A modern, cross-platform desktop client for [ECA (Editor Code Assistant)](https://eca.dev). Built with Electron, designed for developers and non-developers alike.
 
+[![CI](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml)
+[![Release](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/release.yml/badge.svg)](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/release.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/editor-code-assistant/eca-desktop?label=latest)](https://github.com/editor-code-assistant/eca-desktop/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)
-![Electron](https://img.shields.io/badge/electron-33-green)
+
+## Download
+
+Get the latest release for your platform from [**GitHub Releases**](https://github.com/editor-code-assistant/eca-desktop/releases/latest):
+
+| Platform | Formats |
+|----------|---------|
+| macOS | `.dmg`, `.zip` |
+| Linux | `.AppImage`, `.deb` |
+
+> The ECA server binary is downloaded automatically on first launch — no extra setup needed.
 
 ## Architecture
 
@@ -125,6 +139,10 @@ eca-desktop/
 | Linux (x64 & arm64) | ✅ Supported |
 | Windows | 🔮 Planned |
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and how to submit changes.
+
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)

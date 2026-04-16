@@ -15,6 +15,8 @@
     "build:welcome": "esbuild src/renderer/welcome.ts --bundle --outfile=src/renderer/welcome.js",
     "build": "npm run build:webview && npm run build:main && npm run build:preload && npm run build:sidebar && npm run build:welcome",
     "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "package": "npm run build && electron-builder",
     "start": "electron .",
     "package:mac": "npm run build && electron-builder --mac",
@@ -30,11 +32,12 @@
     "@types/follow-redirects": "^1.13.0",
     "@types/node": "^20.x",
     "concurrently": "^9.1.2",
-    "esbuild": "^0.25.3",
-    "typescript-eslint": "^8.0.0",
     "electron": "^33.4.0",
     "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.3",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.4",
     "wait-on": "^8.0.3"
   }
 }

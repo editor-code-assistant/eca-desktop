@@ -5,6 +5,9 @@
 import { BrowserWindow } from 'electron';
 import { ChatEntry, ChatOpenedParams, ChatContentReceivedParams, WorkspaceFolder } from './protocol';
 
+/** Sentinel ID for the placeholder "New Chat" sidebar entry before a prompt is sent. */
+export const PENDING_CHAT_ID = '__pending_new_chat__';
+
 /**
  * Manages chat list state for the sidebar and caches chat payloads
  * and content events so the renderer can be rehydrated after reload.
@@ -55,6 +58,35 @@ export class ChatState {
         if (this._selectedChatId === chatId) {
             this._selectedChatId = null;
         }
+    }
+
+    // ── Pending "New Chat" placeholder ──
+
+    /** Add a placeholder entry that appears in the sidebar as "New Chat" and select it. */
+    addPendingNewChat(): void {
+        this.entries.set(PENDING_CHAT_ID, {
+            id: PENDING_CHAT_ID,
+            title: 'New Chat',
+            status: 'idle',
+            workspaceFolderName: this.workspaceFolderName,
+        });
+        this._selectedChatId = PENDING_CHAT_ID;
+    }
+
+    /** Remove the pending placeholder. Returns true if one was present. */
+    removePendingChat(): boolean {
+        const had = this.entries.has(PENDING_CHAT_ID);
+        if (had) {
+            this.entries.delete(PENDING_CHAT_ID);
+            if (this._selectedChatId === PENDING_CHAT_ID) {
+                this._selectedChatId = null;
+            }
+        }
+        return had;
+    }
+
+    hasPendingChat(): boolean {
+        return this.entries.has(PENDING_CHAT_ID);
     }
 
     // ── Payload cache (for rehydration) ──

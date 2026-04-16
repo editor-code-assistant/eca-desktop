@@ -4,7 +4,7 @@
 
 import { BrowserWindow, ipcMain } from 'electron';
 import { EcaServerStatus } from './server';
-import { ChatState } from './chat-state';
+import { ChatState, PENDING_CHAT_ID } from './chat-state';
 import { dispatch, RouteContext } from './router';
 import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder, ChatEntry } from './protocol';
 import * as jsonrpc from 'vscode-jsonrpc/node';
@@ -223,6 +223,28 @@ export function createBridge(
     // ── Sidebar IPC ──
 
     ipcMain.on('chat-select', (_event, chatId: string) => {
+        // Clicking the pending "New Chat" placeholder — keep showing the empty chat
+        if (chatId === PENDING_CHAT_ID) {
+            const session = sessionManager.getSessionForChat(chatId);
+            if (session) {
+                sessionManager.activeSessionId = session.id;
+                sendToRenderer('server/statusChanged', session.ecaServer.status);
+                sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
+                const sessionMcpData = mcpServers.get(session.id);
+                if (sessionMcpData) {
+                    sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+                }
+            }
+            sendToRenderer('chat/createNewChat', {});
+            sendChatListUpdate();
+            return;
+        }
+
+        // Selecting a real chat — remove any pending placeholders
+        for (const s of sessionManager.getAllSessions()) {
+            s.chatState.removePendingChat();
+        }
+
         const session = sessionManager.getSessionForChat(chatId);
         if (session) {
             sessionManager.activeSessionId = session.id;
@@ -243,12 +265,17 @@ export function createBridge(
     });
 
     ipcMain.on('chat-new', (_event, data?: { sessionId?: string }) => {
+        // Clean up any pending "New Chat" placeholders from all sessions
+        for (const s of sessionManager.getAllSessions()) {
+            s.chatState.removePendingChat();
+        }
+
         const targetSessionId = data?.sessionId ?? sessionManager.activeSessionId;
         if (targetSessionId) {
             const session = sessionManager.getSession(targetSessionId);
             if (session) {
                 sessionManager.activeSessionId = session.id;
-                session.chatState.selectedChatId = null;
+                session.chatState.addPendingNewChat();
 
                 // Notify webview about the session context switch
                 sendToRenderer('server/statusChanged', session.ecaServer.status);

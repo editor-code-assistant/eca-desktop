@@ -50,6 +50,8 @@ const routes: Record<string, RouteHandler> = {
         ctx.sendToRenderer('chat/newChat', { id: result.chatId });
 
         if (isNewChat && result.chatId) {
+            // Replace the pending "New Chat" placeholder with the real entry
+            ctx.chatState.removePendingChat();
             const title = promptText.length > 50
                 ? promptText.substring(0, 50) + '…'
                 : (promptText || 'New Chat');
