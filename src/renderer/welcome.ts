@@ -261,6 +261,7 @@ declare global {
         // Logo
         const logoWrap = document.createElement('div');
         logoWrap.className = 'welcome-logo';
+
         const logoImg = document.createElement('img');
         logoImg.src = ((window as any).mediaUrl || '../../eca-webview/dist') + '/logo.png';
         logoImg.alt = '';

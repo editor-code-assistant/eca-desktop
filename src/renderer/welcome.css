@@ -77,6 +77,12 @@ body.welcome-active .app-content {
     pointer-events: none;
     filter: grayscale(10%);
     transition: opacity 0.4s ease;
+    animation: logo-float 4s ease-in-out infinite;
+}
+
+@keyframes logo-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
 }
 
 #welcome-screen:hover .welcome-logo img {
