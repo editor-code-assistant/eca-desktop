@@ -10,6 +10,20 @@
     font-display: swap;
 }
 
+/* ── Welcome-active state: hide sidebar, expand content ── */
+
+body.welcome-active .sidebar {
+    display: none;
+}
+
+body.welcome-active .desktop-titlebar {
+    left: 0;
+}
+
+body.welcome-active .app-content {
+    padding-top: 0;
+}
+
 #welcome-screen {
     display: flex;
     align-items: center;
@@ -41,7 +55,7 @@
 .welcome-card {
     position: relative;
     z-index: 1;
-    max-width: 400px;
+    max-width: 440px;
     width: 100%;
     padding: 0 32px;
     display: flex;
@@ -56,8 +70,8 @@
 }
 
 .welcome-logo img {
-    width: 128px;
-    height: 128px;
+    width: 160px;
+    height: 160px;
     opacity: 0.18;
     user-select: none;
     pointer-events: none;
@@ -78,7 +92,7 @@
 }
 
 .welcome-title {
-    font-size: 28px;
+    font-size: 36px;
     font-weight: 300;
     color: var(--eca-editor-fg);
     margin: 0 0 10px;
@@ -100,8 +114,8 @@
 }
 
 .welcome-title.collapsed .welcome-title-lead {
-    letter-spacing: 6px;
-    font-size: 32px;
+    letter-spacing: 8px;
+    font-size: 40px;
 }
 
 /* Tail letters — fade & collapse */
@@ -133,7 +147,7 @@
 }
 
 .welcome-subtitle {
-    font-size: 14px;
+    font-size: 16px;
     color: var(--eca-item-selectable-fg);
     margin: 0;
     line-height: 1.6;

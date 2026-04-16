@@ -72,8 +72,8 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
     selectChat: (chatId: string) => {
         ipcRenderer.send('chat-select', chatId);
     },
-    newChat: () => {
-        ipcRenderer.send('chat-new');
+    newChat: (sessionId?: string) => {
+        ipcRenderer.send('chat-new', sessionId ? { sessionId } : undefined);
     },
     deleteChat: (chatId: string) => {
         ipcRenderer.send('chat-delete', chatId);

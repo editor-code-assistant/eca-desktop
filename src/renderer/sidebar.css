@@ -35,6 +35,19 @@
     padding-top: 46px;
 }
 
+.sidebar-title-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sidebar-logo {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    -webkit-app-region: no-drag;
+}
+
 .sidebar-title {
     font-size: 14px;
     font-weight: 600;
@@ -133,17 +146,44 @@
 .sidebar-chat-item {
     display: flex;
     align-items: center;
-    padding: 10px 12px 10px 24px;
+    padding: 7px 10px 7px 18px;
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.15s ease;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
+    position: relative;
 }
 .sidebar-chat-item:hover {
     background: var(--eca-base-hover);
 }
 .sidebar-chat-item.active {
     background: var(--eca-input-bg);
+}
+/* Active accent bar */
+.sidebar-chat-item.active::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--eca-accent-fg);
+}
+
+/* Status dot */
+.sidebar-chat-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 8px;
+    background: transparent;
+    transition: background 0.2s ease;
+}
+.sidebar-chat-item.generating .sidebar-chat-dot {
+    background: var(--eca-accent-fg);
+    animation: pulse 1.5s ease-in-out infinite;
 }
 
 .sidebar-chat-title {
@@ -154,11 +194,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.4;
+    opacity: 0.82;
+    transition: opacity 0.15s ease;
+}
+.sidebar-chat-item.active .sidebar-chat-title {
+    opacity: 1;
+    font-weight: 500;
+}
+.sidebar-chat-item:hover .sidebar-chat-title {
+    opacity: 1;
 }
 
 /* Generating indicator — accent-colored title */
 .sidebar-chat-item.generating .sidebar-chat-title {
     color: var(--eca-accent-fg);
+    opacity: 1;
 }
 
 /* Delete button — visible on hover */
@@ -176,9 +226,10 @@
     transition: opacity 0.15s ease, color 0.15s ease;
 }
 .sidebar-chat-item:hover .sidebar-chat-delete {
-    opacity: 1;
+    opacity: 0.7;
 }
 .sidebar-chat-delete:hover {
+    opacity: 1;
     color: var(--eca-error-fg);
 }
 

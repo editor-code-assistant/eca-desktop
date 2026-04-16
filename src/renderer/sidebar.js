@@ -30,9 +30,10 @@
       const item = document.createElement("div");
       item.className = "sidebar-chat-item";
       if (entry.id === selectedId) item.classList.add("active");
-      if (entry.status === "generating" || entry.status === "busy") {
-        item.classList.add("generating");
-      }
+      const isActive = entry.status === "generating" || entry.status === "busy";
+      if (isActive) item.classList.add("generating");
+      const dot = document.createElement("span");
+      dot.className = "sidebar-chat-dot";
       const title = document.createElement("span");
       title.className = "sidebar-chat-title";
       title.textContent = entry.title || "New Chat";
@@ -44,6 +45,7 @@
         e.stopPropagation();
         window.ecaDesktop?.deleteChat(entry.id);
       });
+      item.appendChild(dot);
       item.appendChild(title);
       item.appendChild(deleteBtn);
       item.addEventListener("click", () => {
@@ -82,7 +84,8 @@
           newChatInSession.innerHTML = '<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
           newChatInSession.addEventListener("click", (e) => {
             e.stopPropagation();
-            window.ecaDesktop?.newChat();
+            window.ecaDesktop?.newChat(session.id);
+            closeSidebar();
           });
           const closeBtn = document.createElement("button");
           closeBtn.className = "sidebar-workspace-action-btn sidebar-workspace-close";

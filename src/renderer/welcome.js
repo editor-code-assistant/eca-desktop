@@ -215,9 +215,11 @@
       if (hasSessions) {
         welcomeScreen.style.display = "none";
         root.style.display = "";
+        document.body.classList.remove("welcome-active");
         stopRain();
         return;
       }
+      document.body.classList.add("welcome-active");
       welcomeScreen.style.display = "flex";
       root.style.display = "none";
       const existingCanvas = rainCanvas;

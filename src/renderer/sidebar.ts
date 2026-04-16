@@ -44,7 +44,7 @@ interface EcaDesktopApi {
     onSidebarToggle: (callback: () => void) => void;
     removeSidebarToggleListener: (callback: () => void) => void;
     selectChat: (chatId: string) => void;
-    newChat: () => void;
+    newChat: (sessionId?: string) => void;
     deleteChat: (chatId: string) => void;
     createSession: (uri?: string) => void;
     removeSession: (sessionId: string) => void;
@@ -95,9 +95,12 @@ declare global {
         const item = document.createElement('div');
         item.className = 'sidebar-chat-item';
         if (entry.id === selectedId) item.classList.add('active');
-        if (entry.status === 'generating' || entry.status === 'busy') {
-            item.classList.add('generating');
-        }
+        const isActive = entry.status === 'generating' || entry.status === 'busy';
+        if (isActive) item.classList.add('generating');
+
+        // Status dot — visible when generating
+        const dot = document.createElement('span');
+        dot.className = 'sidebar-chat-dot';
 
         const title = document.createElement('span');
         title.className = 'sidebar-chat-title';
@@ -112,6 +115,7 @@ declare global {
             window.ecaDesktop?.deleteChat(entry.id);
         });
 
+        item.appendChild(dot);
         item.appendChild(title);
         item.appendChild(deleteBtn);
 
@@ -165,7 +169,8 @@ declare global {
                 newChatInSession.innerHTML = '<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
                 newChatInSession.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    window.ecaDesktop?.newChat();
+                    window.ecaDesktop?.newChat(session.id);
+                    closeSidebar();
                 });
 
                 const closeBtn = document.createElement('button');

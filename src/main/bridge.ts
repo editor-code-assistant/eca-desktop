@@ -106,6 +106,18 @@ export function createBridge(
 
         conn.onNotification(rpc.chatContentReceived, (params) => {
             session.chatState.pushContentEvent(params.chatId, params);
+
+            // Update sidebar title when metadata arrives
+            const content = (params as Record<string, unknown>).content as
+                | { type?: string; title?: string }
+                | undefined;
+            if (content?.type === 'metadata' && content.title) {
+                session.chatState.addOrUpdateEntry(params.chatId, {
+                    title: content.title,
+                });
+                sendChatListUpdate();
+            }
+
             sendToRenderer('chat/contentReceived', params);
         });
 
@@ -237,10 +249,20 @@ export function createBridge(
             if (session) {
                 sessionManager.activeSessionId = session.id;
                 session.chatState.selectedChatId = null;
+
+                // Notify webview about the session context switch
+                sendToRenderer('server/statusChanged', session.ecaServer.status);
+                sendToRenderer('server/setWorkspaceFolders', [session.workspaceFolder]);
+
+                const sessionMcpData = mcpServers.get(session.id);
+                if (sessionMcpData) {
+                    sendToRenderer('tool/serversUpdated', Object.values(sessionMcpData));
+                }
             }
         }
         sendToRenderer('chat/createNewChat', {});
         sendChatListUpdate();
+        sendSessionListUpdate();
     });
 
     ipcMain.on('chat-delete', async (_event, chatId: string) => {

@@ -122,6 +122,14 @@ async function main(): Promise<void> {
 
     bridge.sendSessionListUpdate();
 
+    // Switch webview to a fresh chat for the new session
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('server-message', {
+        type: 'chat/createNewChat',
+        data: {},
+      });
+    }
+
     try {
       await session.ecaServer.start([workspaceFolder]);
       bridge.registerServerNotifications(session);
