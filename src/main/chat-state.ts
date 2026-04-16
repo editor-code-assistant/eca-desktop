@@ -16,6 +16,7 @@ export class ChatState {
     private entries = new Map<string, ChatEntry>();
     private payloads = new Map<string, ChatOpenedParams>();
     private contentEvents = new Map<string, ChatContentReceivedParams[]>();
+    private subagentChatIds = new Set<string>();
     private _selectedChatId: string | null = null;
     private workspaceFolderName: string;
 
@@ -30,6 +31,18 @@ export class ChatState {
 
     set selectedChatId(id: string | null) {
         this._selectedChatId = id;
+    }
+
+    // ── Subagent tracking ──
+
+    /** Mark a chat as belonging to a subagent so it never appears in the sidebar. */
+    markAsSubagent(chatId: string): void {
+        this.subagentChatIds.add(chatId);
+    }
+
+    /** Returns true if this chat belongs to a subagent. */
+    isSubagent(chatId: string): boolean {
+        return this.subagentChatIds.has(chatId);
     }
 
     // ── Entry management ──
