@@ -3,9 +3,9 @@
  * ═══════════════════════════════════════════════════ */
 
 @font-face {
-    font-family: 'Inter';
-    src: url('./fonts/Inter-Variable.woff2') format('woff2-variations');
-    font-weight: 100 900;
+    font-family: 'Cairo';
+    src: url('./fonts/Cairo-Variable.woff2') format('woff2');
+    font-weight: 200 1000;
     font-style: normal;
     font-display: swap;
 }
@@ -97,7 +97,7 @@ body.welcome-active .app-content {
     color: var(--eca-editor-fg);
     margin: 0 0 10px;
     letter-spacing: 2px;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
     white-space: nowrap;
     display: inline-flex;
     align-items: baseline;
@@ -107,7 +107,7 @@ body.welcome-active .app-content {
 .welcome-title-lead {
     color: var(--eca-editor-fg);
     font-weight: 400;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
     font-weight: 500;
     transition: letter-spacing 2s cubic-bezier(0.25, 0.1, 0.25, 1),
                 font-size 2s cubic-bezier(0.25, 0.1, 0.25, 1);

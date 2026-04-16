@@ -51,6 +51,7 @@
 .sidebar-title {
     font-size: 14px;
     font-weight: 600;
+    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
     color: var(--eca-editor-fg);
     letter-spacing: 0.3px;
 }
