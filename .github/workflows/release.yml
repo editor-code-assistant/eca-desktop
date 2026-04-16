@@ -37,23 +37,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Package & Publish (macOS unsigned)
-        if: matrix.platform == 'mac' && !secrets.MAC_CSC_LINK
+      - name: Package & Publish (macOS)
+        if: matrix.platform == 'mac'
         run: npx electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Package & Publish (macOS signed)
-        if: matrix.platform == 'mac' && secrets.MAC_CSC_LINK
-        run: npx electron-builder --mac --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Package & Publish (Linux)
         if: matrix.platform == 'linux'
