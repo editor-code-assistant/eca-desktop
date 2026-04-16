@@ -88,7 +88,7 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 4px 8px;
+    padding: 4px 0;
 }
 
 .sidebar-chat-list::-webkit-scrollbar {
@@ -148,7 +148,7 @@
     display: flex;
     align-items: center;
     padding: 7px 10px 7px 18px;
-    border-radius: 8px;
+    border-radius: 0;
     cursor: pointer;
     transition: background 0.15s ease;
     margin-bottom: 1px;
@@ -183,7 +183,7 @@
     transition: background 0.2s ease;
 }
 .sidebar-chat-item.generating .sidebar-chat-dot {
-    background: var(--eca-accent-fg);
+    background: #eab308;
     animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -206,9 +206,9 @@
     opacity: 1;
 }
 
-/* Generating indicator — accent-colored title */
+/* Generating indicator — yellow title while running */
 .sidebar-chat-item.generating .sidebar-chat-title {
-    color: var(--eca-accent-fg);
+    color: #eab308;
     opacity: 1;
 }
 
