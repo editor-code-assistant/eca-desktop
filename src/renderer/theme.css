@@ -121,7 +121,6 @@ html[data-editor="web"] {
 @media (min-width: 1100px) {
   /* Constrain content width and center */
   [data-editor="web"] .messages-container,
-  [data-editor="web"] .progress-area,
   [data-editor="web"] .prompt-area {
     max-width: 52em;
     margin-left: auto;
@@ -156,26 +155,4 @@ html[data-editor="web"] {
     background: transparent;
   }
 
-  /* Progress + prompt form a single card when progress is visible.
-     Progress gets the top border/corners, prompt loses its top border. */
-  [data-editor="web"] .progress-area {
-    border: 1px solid var(--eca-base-border);
-    border-bottom: none;
-    border-radius: 8px 8px 0 0;
-    margin-bottom: 0;
-    background: var(--eca-panel-bg);
-  }
-  [data-editor="web"] .progress-area + .prompt-area {
-    border-top: none;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-  }
-
-  /* Progress inherits the prompt's state color */
-  [data-editor="web"] .progress-area:has(+ .prompt-area.running) {
-    border-color: var(--eca-warning-fg, #cca700);
-  }
-  [data-editor="web"] .progress-area:has(+ .prompt-area.waiting-approval) {
-    border-color: var(--eca-approval-fg, #e8850c);
-  }
 }
