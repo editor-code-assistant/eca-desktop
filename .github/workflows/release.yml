@@ -34,8 +34,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Clean runner npm auth
-        run: rm -f ~/.npmrc
+      - name: Debug npm config
+        run: |
+          echo "=== ~/.npmrc ==="
+          cat ~/.npmrc 2>/dev/null || echo "not found"
+          echo "=== project .npmrc ==="
+          cat .npmrc 2>/dev/null || echo "not found"
+          echo "=== npm config list ==="
+          npm config list
+          echo "=== npm config list -l (auth related) ==="
+          npm config list -l 2>/dev/null | grep -i -E 'auth|token|registry' || true
+          echo "=== env vars ==="
+          env | grep -i -E 'npm|node|token|auth' || true
+          echo "=== global npmrc path ==="
+          npm config get globalconfig
+          cat "$(npm config get globalconfig)" 2>/dev/null || echo "not found"
+
+      - name: Clean all npm auth
+        run: |
+          rm -f ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" > ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" > eca-webview/.npmrc
 
       - name: Build
         run: npm run build
