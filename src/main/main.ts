@@ -14,6 +14,10 @@ import { WorkspaceFolder } from './protocol';
 const IS_DEV = process.env.NODE_ENV === 'development';
 const WEBVIEW_DEV_URL = 'http://localhost:5173';
 
+// Set the application name explicitly so macOS shows "ECA" in the menu bar,
+// dock, and About dialog instead of the default "Electron" during development.
+app.name = 'ECA';
+
 // On Linux without proper GPU drivers (e.g. VMs, some Wayland compositors),
 // hardware acceleration can crash the GPU process. Detect and disable if needed.
 if (process.platform === 'linux' && process.env.ECA_DISABLE_GPU) {
@@ -56,6 +60,12 @@ function createWindow(): BrowserWindow {
 
 async function main(): Promise<void> {
   await app.whenReady();
+
+  // On macOS, the dock icon in dev mode defaults to the Electron logo.
+  // Explicitly set it to the ECA icon so it matches production builds.
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(path.join(__dirname, '../resources/icon.png'));
+  }
 
   const mainWindow = createWindow();
 
