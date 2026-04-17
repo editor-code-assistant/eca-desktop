@@ -74,19 +74,33 @@ jobs:
 
       - name: Package & Publish (macOS)
         if: matrix.platform == 'mac'
-        run: npx electron-builder --mac --x64 --arm64 --publish always
+        shell: bash
+        # Secrets are staged under *_RAW aliases via env: and only re-exported
+        # under the real names when non-empty. This matters because an empty
+        # CSC_LINK is NOT the same as an unset CSC_LINK — electron-builder
+        # treats an empty CSC_LINK as a file path and fails with "not a file".
+        # Only by leaving CSC_LINK truly unset does it skip signing cleanly.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- Code signing (only active when CSC_LINK secret is set) ---
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # --- Notarization (only active when APPLE_* secrets are set) ---
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # When signing secrets are absent, force electron-builder to skip signing
-          # instead of searching the keychain (which would fail on CI).
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK == '' && 'false' || 'true' }}
+          CSC_LINK_RAW: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_RAW: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID_RAW: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD_RAW: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID_RAW: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -n "${CSC_LINK_RAW:-}" ]]; then
+            echo "→ Apple signing identity present; building SIGNED (+ notarized if Apple* secrets set)"
+            export CSC_LINK="$CSC_LINK_RAW"
+            export CSC_KEY_PASSWORD="$CSC_KEY_PASSWORD_RAW"
+            export APPLE_ID="$APPLE_ID_RAW"
+            export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
+            export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
+            # Leave CSC_IDENTITY_AUTO_DISCOVERY unset → electron-builder default (true)
+          else
+            echo "→ No Apple signing identity; building UNSIGNED"
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac --x64 --arm64 --publish always
 
       - name: Package & Publish (Linux)
         if: matrix.platform == 'linux'
