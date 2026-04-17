@@ -270,8 +270,10 @@ export class EcaServer {
                 processId: process.pid,
                 clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
                 capabilities: {
-                    codeAssistant: { chat: true },
-                    chatCapabilities: { askQuestion: true },
+                    codeAssistant: {
+                        chat: true,
+                        chatCapabilities: { askQuestion: true },
+                    },
                 },
                 workspaceFolders,
             });

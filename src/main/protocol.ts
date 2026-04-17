@@ -37,8 +37,10 @@ export interface InitializeParams {
     processId: number;
     clientInfo: { name: string; version: string };
     capabilities: {
-        codeAssistant: { chat: boolean };
-        chatCapabilities?: { askQuestion?: boolean };
+        codeAssistant: {
+            chat: boolean;
+            chatCapabilities?: { askQuestion?: boolean };
+        };
     };
     workspaceFolders: WorkspaceFolder[];
 }
