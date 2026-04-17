@@ -240,6 +240,55 @@ describe('ChatState', () => {
             state.addServerKnownEntries([]);
             expect(state.getChatListUpdate().entries).toHaveLength(0);
         });
+
+        it('surfaces the server-sorted (newest-first) list with newest on top', () => {
+            // Server sends desc by updatedAt: [newest, …, oldest]
+            state.addServerKnownEntries([
+                summary({ id: 'c-new', title: 'Newest', updatedAt: 300 }),
+                summary({ id: 'b-mid', title: 'Middle', updatedAt: 200 }),
+                summary({ id: 'a-old', title: 'Oldest', updatedAt: 100 }),
+            ]);
+            const ids = state.getChatListUpdate().entries.map(e => e.id);
+            expect(ids).toEqual(['c-new', 'b-mid', 'a-old']);
+        });
+
+        it('propagates updatedAt from each summary onto the sidebar entry', () => {
+            state.addServerKnownEntries([
+                summary({ id: 'x', updatedAt: 12345 }),
+                summary({ id: 'y', updatedAt: 67890 }),
+            ]);
+            const entries = state.getChatListUpdate().entries;
+            const x = entries.find(e => e.id === 'x');
+            const y = entries.find(e => e.id === 'y');
+            expect(x?.updatedAt).toBe(12345);
+            expect(y?.updatedAt).toBe(67890);
+        });
+    });
+
+    describe('updatedAt handling on addOrUpdateEntry', () => {
+        it('defaults to a recent timestamp for brand-new entries', () => {
+            const before = Date.now();
+            state.addOrUpdateEntry('fresh', { title: 'Fresh' });
+            const after = Date.now();
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'fresh');
+            expect(entry?.updatedAt).toBeGreaterThanOrEqual(before);
+            expect(entry?.updatedAt).toBeLessThanOrEqual(after);
+        });
+
+        it('preserves existing updatedAt when a partial update has none', () => {
+            state.addOrUpdateEntry('x', { title: 'First', updatedAt: 9999 });
+            state.addOrUpdateEntry('x', { title: 'Second' });
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'x');
+            expect(entry?.updatedAt).toBe(9999);
+            expect(entry?.title).toBe('Second');
+        });
+
+        it('applies an explicit updatedAt on update', () => {
+            state.addOrUpdateEntry('x', { title: 'First', updatedAt: 1000 });
+            state.addOrUpdateEntry('x', { updatedAt: 5000 });
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'x');
+            expect(entry?.updatedAt).toBe(5000);
+        });
     });
 
     describe('hasBeenOpened', () => {

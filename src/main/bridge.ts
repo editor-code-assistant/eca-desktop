@@ -169,6 +169,9 @@ export function createBridge(
                     session.chatState.addOrUpdateEntry(params.chatId, {
                         title: params.title ?? 'New Chat',
                         status: params.status ?? 'idle',
+                        // A chat being opened now is "fresh" — refresh the
+                        // sidebar date so it sorts/displays correctly.
+                        updatedAt: Date.now(),
                     });
                     session.chatState.selectedChatId = params.chatId;
                     sessionManager.activeSessionId = session.id;

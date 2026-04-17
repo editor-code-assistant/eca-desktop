@@ -16,6 +16,13 @@ export interface ChatEntry {
     title: string;
     status: string;
     workspaceFolderName: string;
+    /**
+     * Epoch millis the chat was last touched. Populated from the server on
+     * `chat/list` and refreshed locally on `chat/opened` or when an entry is
+     * first created in the current session. Optional because very old call
+     * sites may still omit it.
+     */
+    updatedAt?: number;
 }
 
 export interface ChatListUpdate {

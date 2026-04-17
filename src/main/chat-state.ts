@@ -49,11 +49,20 @@ export class ChatState {
 
     addOrUpdateEntry(chatId: string, partial: Partial<ChatEntry>): void {
         const existing = this.entries.get(chatId);
+        // updatedAt policy:
+        // - explicit value from the caller always wins,
+        // - otherwise keep whatever was already there,
+        // - otherwise (brand-new entry with no server timestamp) default to
+        //   "now" so the sidebar can show a sensible date even for chats
+        //   created optimistically in the current session.
+        const updatedAt =
+            partial.updatedAt ?? existing?.updatedAt ?? (existing ? undefined : Date.now());
         this.entries.set(chatId, {
             id: chatId,
             title: partial.title ?? existing?.title ?? 'New Chat',
             status: partial.status ?? existing?.status ?? 'idle',
             workspaceFolderName: partial.workspaceFolderName ?? this.workspaceFolderName,
+            ...(updatedAt !== undefined ? { updatedAt } : {}),
         });
     }
 
@@ -71,7 +80,13 @@ export class ChatState {
      * fields that are currently missing.
      */
     addServerKnownEntries(summaries: ChatSummary[]): void {
-        for (const summary of summaries) {
+        // The server returns chats sorted newest-first (desc by updatedAt),
+        // but the client's Map-order invariant is "most-recently-touched lives
+        // at the end". `getChatListUpdate` then `.reverse()`s so the newest
+        // ends up at the top of the sidebar. To preserve that invariant we
+        // must insert from oldest to newest, hence the reversed iteration.
+        for (let i = summaries.length - 1; i >= 0; i--) {
+            const summary = summaries[i];
             if (this.subagentChatIds.has(summary.id)) continue;
             const existing = this.entries.get(summary.id);
             // If there's already a richer entry (e.g. live generating chat),
@@ -81,6 +96,12 @@ export class ChatState {
                 title: existing?.title ?? summary.title ?? 'New Chat',
                 status: existing?.status ?? summary.status ?? 'idle',
                 workspaceFolderName: existing?.workspaceFolderName ?? this.workspaceFolderName,
+                // Prefer the server's updatedAt (authoritative last-touched) so
+                // the sidebar can display a correct date even for chats that
+                // haven't been opened in this session yet.
+                ...(summary.updatedAt !== undefined || existing?.updatedAt !== undefined
+                    ? { updatedAt: summary.updatedAt ?? existing?.updatedAt }
+                    : {}),
             });
         }
     }

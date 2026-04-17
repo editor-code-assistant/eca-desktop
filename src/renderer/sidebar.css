@@ -212,6 +212,29 @@
     opacity: 1;
 }
 
+/* Relative-date label rendered next to the chat title. Muted so the title
+   still leads, sized down slightly, and marked flex-shrink:0 so it doesn't
+   get squeezed out by a very long title (the title handles its own ellipsis). */
+.sidebar-chat-date {
+    font-size: 11px;
+    color: var(--eca-item-selectable-fg);
+    opacity: 0.55;
+    margin-left: 6px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    transition: opacity 0.15s ease;
+}
+.sidebar-chat-item:hover .sidebar-chat-date,
+.sidebar-chat-item.active .sidebar-chat-date {
+    opacity: 0.75;
+}
+/* When the delete button appears on hover, the date is no longer the
+   rightmost element — hide it so the row doesn't get crowded. */
+.sidebar-chat-item:hover .sidebar-chat-date {
+    display: none;
+}
+
 /* Delete button — visible on hover */
 .sidebar-chat-delete {
     opacity: 0;
@@ -326,6 +349,26 @@
     font-size: 12px;
     color: var(--eca-item-selectable-fg);
     font-style: italic;
+}
+
+/* Show-more / Show-less toggle appended under a workspace's chat list when
+   it has more than MAX_CHATS_COLLAPSED chats. The left padding matches the
+   start of the chat *title*, not the chat item — `.sidebar-chat-item` has
+   18px of its own padding plus a 5px dot + 8px margin-right before the
+   title, which lands text at 31px. */
+.sidebar-show-more {
+    padding: 6px 10px 6px 31px;
+    font-size: 12px;
+    color: var(--eca-item-selectable-fg);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease, background 0.15s ease;
+    opacity: 0.75;
+}
+.sidebar-show-more:hover {
+    background: var(--eca-base-hover);
+    color: var(--eca-editor-fg);
+    opacity: 1;
 }
 
 /* ── Bottom action bar ── */

@@ -15,6 +15,8 @@ interface ChatEntry {
     title: string;
     status: string;
     workspaceFolderName: string;
+    /** Epoch millis when the chat was last touched. */
+    updatedAt?: number;
 }
 
 interface ChatListUpdate {
@@ -72,6 +74,44 @@ declare global {
     let activeSessionId: string | null = null;
     let isOpen = false;
 
+    // ── Show-more / collapse state ──
+    //
+    // Each workspace group renders at most MAX_CHATS_COLLAPSED chats by default
+    // with a "Show N more" affordance underneath. We track the user's choice
+    // per workspace *name* rather than per session id, because session ids are
+    // regenerated on every app launch while workspace folder names are stable.
+    // Persisted to localStorage so the state survives dev reloads & restarts.
+    const MAX_CHATS_COLLAPSED = 7;
+    const EXPANDED_STORAGE_KEY = 'eca-sidebar-expanded-workspaces';
+
+    function loadExpandedWorkspaces(): Set<string> {
+        try {
+            const raw = localStorage.getItem(EXPANDED_STORAGE_KEY);
+            if (!raw) return new Set();
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+            }
+        } catch {
+            // Corrupted value — ignore and start fresh.
+        }
+        return new Set();
+    }
+
+    function saveExpandedWorkspaces(): void {
+        try {
+            localStorage.setItem(
+                EXPANDED_STORAGE_KEY,
+                JSON.stringify(Array.from(expandedWorkspaces)),
+            );
+        } catch {
+            // Storage may be unavailable (privacy mode etc.) — in-memory state
+            // still works for the current session.
+        }
+    }
+
+    const expandedWorkspaces: Set<string> = loadExpandedWorkspaces();
+
     // ── Helpers ──
 
     function groupEntriesByWorkspace(items: ChatEntry[]): {
@@ -91,6 +131,63 @@ declare global {
         return { groups, groupOrder };
     }
 
+    /**
+     * Concise relative-date label for a sidebar chat entry. Matches the
+     * familiar Slack/iMessage style so the column stays narrow:
+     *   < 1 min        -> "now"
+     *   < 1 hour       -> "5m"
+     *   < 24 hours     -> "3h"
+     *   < 7 days       -> "2d"
+     *   same calendar year -> "Dec 5"
+     *   older          -> "Dec 2024"
+     */
+    function formatRelativeDate(ms: number): string {
+        const now = Date.now();
+        const diffMs = now - ms;
+        // Clock skew — treat future timestamps as "now" rather than negative.
+        if (diffMs < 60_000) return 'now';
+        if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m`;
+        if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h`;
+        if (diffMs < 7 * 86_400_000) return `${Math.floor(diffMs / 86_400_000)}d`;
+
+        const date = new Date(ms);
+        const nowDate = new Date(now);
+        const month = date.toLocaleString('en-US', { month: 'short' });
+        if (date.getFullYear() === nowDate.getFullYear()) {
+            return `${month} ${date.getDate()}`;
+        }
+        return `${month} ${date.getFullYear()}`;
+    }
+
+    /**
+     * Build a "Show N more" / "Show less" row for a workspace group. The
+     * caller is responsible for appending it under the sliced chat list;
+     * clicking it toggles the workspace's expanded state and re-renders.
+     */
+    function createShowMoreToggle(
+        workspaceName: string,
+        hiddenCount: number,
+        expanded: boolean,
+    ): HTMLDivElement {
+        const row = document.createElement('div');
+        row.className = 'sidebar-show-more';
+        row.textContent = expanded ? 'Show less' : `Show ${hiddenCount} more`;
+        row.title = expanded
+            ? 'Collapse to the most recent chats'
+            : `Show all chats for ${workspaceName}`;
+        row.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (expanded) {
+                expandedWorkspaces.delete(workspaceName);
+            } else {
+                expandedWorkspaces.add(workspaceName);
+            }
+            saveExpandedWorkspaces();
+            render();
+        });
+        return row;
+    }
+
     function createChatItem(entry: ChatEntry): HTMLDivElement {
         const item = document.createElement('div');
         item.className = 'sidebar-chat-item';
@@ -106,6 +203,17 @@ declare global {
         title.className = 'sidebar-chat-title';
         title.textContent = entry.title || 'New Chat';
 
+        // Concise relative-date label (e.g. "3h", "Dec 5"). Only rendered
+        // when we have a timestamp to avoid a misleading "now" for entries
+        // that predate the updatedAt plumbing.
+        let dateEl: HTMLSpanElement | null = null;
+        if (typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt)) {
+            dateEl = document.createElement('span');
+            dateEl.className = 'sidebar-chat-date';
+            dateEl.textContent = formatRelativeDate(entry.updatedAt);
+            dateEl.title = new Date(entry.updatedAt).toLocaleString();
+        }
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'sidebar-chat-delete';
         deleteBtn.title = 'Delete chat';
@@ -117,6 +225,7 @@ declare global {
 
         item.appendChild(dot);
         item.appendChild(title);
+        if (dateEl) item.appendChild(dateEl);
         item.appendChild(deleteBtn);
 
         item.addEventListener('click', () => {
@@ -195,9 +304,23 @@ declare global {
                     (e) => e.workspaceFolderName === session.workspaceFolder.name
                 );
 
-                sessionEntries.forEach((entry) => {
+                const wsName = session.workspaceFolder.name;
+                const expanded = expandedWorkspaces.has(wsName);
+                const visibleEntries =
+                    sessionEntries.length > MAX_CHATS_COLLAPSED && !expanded
+                        ? sessionEntries.slice(0, MAX_CHATS_COLLAPSED)
+                        : sessionEntries;
+
+                visibleEntries.forEach((entry) => {
                     group.appendChild(createChatItem(entry));
                 });
+
+                if (sessionEntries.length > MAX_CHATS_COLLAPSED) {
+                    const hiddenCount = sessionEntries.length - visibleEntries.length;
+                    group.appendChild(
+                        createShowMoreToggle(wsName, hiddenCount, expanded),
+                    );
+                }
 
                 // If no chats yet, show hint
                 if (sessionEntries.length === 0) {
@@ -228,9 +351,24 @@ declare global {
                 header.appendChild(nameEl);
                 group.appendChild(header);
 
-                result.groups[wsName].forEach((entry) => {
+                const wsEntries = result.groups[wsName];
+                const expanded = expandedWorkspaces.has(wsName);
+                const visibleEntries =
+                    wsEntries.length > MAX_CHATS_COLLAPSED && !expanded
+                        ? wsEntries.slice(0, MAX_CHATS_COLLAPSED)
+                        : wsEntries;
+
+                visibleEntries.forEach((entry) => {
                     group.appendChild(createChatItem(entry));
                 });
+
+                if (wsEntries.length > MAX_CHATS_COLLAPSED) {
+                    const hiddenCount = wsEntries.length - visibleEntries.length;
+                    group.appendChild(
+                        createShowMoreToggle(wsName, hiddenCount, expanded),
+                    );
+                }
+
                 chatList.appendChild(group);
             });
         }
