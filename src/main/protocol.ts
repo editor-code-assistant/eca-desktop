@@ -321,6 +321,38 @@ export interface EditorSaveClipboardImageResult {
     path: string;
 }
 
+// ── Editor: ECA global config ──
+
+export interface EditorReadGlobalConfigParams {
+    requestId?: string;
+}
+
+export interface EditorReadGlobalConfigResult {
+    requestId?: string;
+    /** Raw file contents. Empty string when the file does not yet exist. */
+    contents: string;
+    /** Absolute path resolved on the main side (see getGlobalConfigPath). */
+    path: string;
+    /** Whether the file exists on disk at read time. */
+    exists: boolean;
+    /** Populated when reading succeeded structurally but an error was caught. */
+    error?: string;
+}
+
+export interface EditorWriteGlobalConfigData {
+    contents: string;
+    requestId?: string;
+}
+
+export interface EditorWriteGlobalConfigResult {
+    requestId?: string;
+    ok: boolean;
+    /** Absolute path written to when ok === true. */
+    path?: string;
+    /** Populated on validation or IO failure. Contents are untouched on disk. */
+    error?: string;
+}
+
 // ── Session Management ──
 
 export interface SessionInfo {
@@ -383,7 +415,10 @@ export type IpcMessageType =
     | 'editor/openUrl'
     | 'editor/saveFile'
     | 'editor/saveClipboardImage'
-    | 'editor/toggleSidebar';
+    | 'editor/toggleSidebar'
+    | 'editor/openGlobalConfig'
+    | 'editor/readGlobalConfig'
+    | 'editor/writeGlobalConfig';
 
 export interface IpcMessage {
     type: IpcMessageType;

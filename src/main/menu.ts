@@ -1,6 +1,7 @@
 import { app, Menu, shell } from 'electron';
 import type { BrowserWindow } from 'electron';
 import { DOCS_URL, ISSUES_URL } from './constants';
+import * as editorActions from './editor-actions';
 import { openPreferencesWindow } from './preferences-window';
 
 export function createMenu(mainWindow: BrowserWindow) {
@@ -152,6 +153,10 @@ export function createMenu(mainWindow: BrowserWindow) {
                     label: 'Open Settings Page',
                     accelerator: 'CmdOrCtrl+Shift+,',
                     click: () => sendWebview('navigateTo', { path: '/settings' }),
+                },
+                {
+                    label: 'Open Global Config…',
+                    click: () => editorActions.openGlobalConfig(),
                 },
             ],
         },

@@ -250,6 +250,28 @@ const routes: Record<string, RouteHandler> = {
             ctx.mainWindow.webContents.send('sidebar-toggle');
         }
     },
+
+    'editor/openGlobalConfig': () => {
+        editorActions.openGlobalConfig();
+    },
+
+    'editor/readGlobalConfig': (ctx, data) => {
+        const result = editorActions.readGlobalConfig();
+        ctx.sendToRenderer('editor/readGlobalConfig', {
+            ...result,
+            requestId: data.requestId,
+        });
+    },
+
+    'editor/writeGlobalConfig': (ctx, data) => {
+        const result = editorActions.writeGlobalConfig({
+            contents: (data.contents as string) ?? '',
+        });
+        ctx.sendToRenderer('editor/writeGlobalConfig', {
+            ...result,
+            requestId: data.requestId,
+        });
+    },
 };
 
 // ── Public API ──

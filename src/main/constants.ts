@@ -29,6 +29,47 @@ export function getDataDir(): string {
     return dir;
 }
 
+// ── ECA global config path ──
+
+/**
+ * Resolves the absolute path to the ECA global config JSON file.
+ *
+ * Resolution order:
+ *   1. `ECA_CONFIG_PATH` environment variable (absolute path), if set.
+ *   2. `$XDG_CONFIG_HOME/eca/config.json` if `XDG_CONFIG_HOME` is set.
+ *   3. Platform default:
+ *      - darwin:  `~/Library/Application Support/eca/config.json`
+ *      - win32:   `%APPDATA%\eca\config.json` (falls back to `~/.config/eca/config.json`)
+ *      - others:  `~/.config/eca/config.json`
+ *
+ * Note: this does not touch the filesystem. Creation is the caller's
+ * responsibility.
+ */
+export function getGlobalConfigPath(): string {
+    const override = process.env.ECA_CONFIG_PATH;
+    if (override && override.trim().length > 0) {
+        return override;
+    }
+
+    const xdg = process.env.XDG_CONFIG_HOME;
+    if (xdg && xdg.trim().length > 0) {
+        return path.join(xdg, 'eca', 'config.json');
+    }
+
+    if (process.platform === 'darwin') {
+        return path.join(os.homedir(), 'Library', 'Application Support', 'eca', 'config.json');
+    }
+
+    if (process.platform === 'win32') {
+        const appData = process.env.APPDATA;
+        if (appData && appData.trim().length > 0) {
+            return path.join(appData, 'eca', 'config.json');
+        }
+    }
+
+    return path.join(os.homedir(), '.config', 'eca', 'config.json');
+}
+
 // ── Platform artifacts ──
 
 export const PLATFORM_ARTIFACTS: Record<string, Record<string, string>> = {
