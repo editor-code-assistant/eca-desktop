@@ -12,10 +12,17 @@ A modern, cross-platform desktop client for [ECA (Editor Code Assistant)](https:
 
 Get the latest release for your platform from [**GitHub Releases**](https://github.com/editor-code-assistant/eca-desktop/releases/latest):
 
-| Platform | Formats |
-|----------|---------|
-| macOS | `.dmg`, `.zip` |
-| Linux | `.AppImage`, `.deb` |
+| Platform | Architecture          | Formats              |
+|----------|-----------------------|----------------------|
+| macOS    | Intel (x64)           | `.dmg`, `.zip`       |
+| macOS    | Apple Silicon (arm64) | `.dmg`, `.zip`       |
+| Linux    | x64                   | `.AppImage`, `.deb`  |
+| Linux    | arm64                 | `.AppImage`, `.deb`  |
+
+Release assets are published with [SLSA build provenance](https://slsa.dev/) so you can verify they were built by this repository's CI.
+
+> **Auto-updates:** `.dmg`, `.zip`, and `.AppImage` update in place via `electron-updater`.
+> `.deb` does **not** auto-update — upgrade by downloading a fresh `.deb` from Releases (or via `apt` once an apt repository is published).
 
 > The ECA server binary is downloaded automatically on first launch — no extra setup needed.
 

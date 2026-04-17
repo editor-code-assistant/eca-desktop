@@ -1,10 +1,12 @@
-/* ECA Desktop dark theme — defines --eca-* CSS variables for the webview.
+/* ECA Desktop themes — defines --eca-* CSS variables for the webview.
  *
  * The eca-webview has theme rulesets for "vscode" and "intellij" editors
  * but none for "web". Since eca-desktop sets editor = "web", we must
  * provide all --eca-* variables here.
  *
- * Palette: "Carbon" — pure neutral gray base with ECA teal accent.
+ * Default palette: "Carbon" (dark) — pure neutral gray base with ECA
+ * teal accent. A light override follows, keyed on [data-theme="light"];
+ * the renderer's theme-bootstrap applies the attribute on <html>.
  */
 html[data-editor="web"] {
   /* ── Core surfaces ── */
@@ -81,6 +83,109 @@ html[data-editor="web"] {
 
   /* ── Sidebar ── */
   --eca-sidebar-bg: #080808;
+
+  /* ── Brand ── */
+  /* Color of the ECA logo silhouette (used as a CSS mask fill in
+   * sidebar.css / welcome.css). On dark we keep it near-white so the
+   * mark reads cleanly; on light we swap to the ECA teal so it has
+   * contrast and stays on-brand. */
+  --eca-logo-fg: #f8f8f8;
+  /* Opacity of the welcome-screen logo. On dark the logo is a subtle
+   * ghost behind the code-rain background, so it's heavily faded. In
+   * the light override below we switch it to fully opaque so the
+   * teal reads as the actual brand color rather than a washed cyan. */
+  --eca-logo-opacity: 0.18;
+  --eca-logo-opacity-hover: 0.28;
+}
+
+/* ═══════════════════════════════════════════════════
+ * Light theme override
+ *
+ * Activates when theme-bootstrap sets data-theme="light" on <html>.
+ * Selector specificity is higher than the dark block above, so every
+ * matching --eca-* variable is overridden. Variables not listed here
+ * are inherited from the dark block — keep this list in sync when new
+ * variables are added.
+ * ═══════════════════════════════════════════════════ */
+html[data-editor="web"][data-theme="light"] {
+  /* ── Core surfaces ── */
+  --eca-editor-bg: #ffffff;
+  --eca-editor-fg: #1f2328;
+  --eca-base-bg: #ffffff;
+  --eca-fg: #1f2328;
+  --eca-accent-fg: #007a94;
+
+  /* ── Panels ── */
+  --eca-panel-bg: #f6f7f9;
+  --eca-panel-border: #dde1e6;
+
+  /* ── Inputs ── */
+  --eca-input-bg: #ffffff;
+  --eca-input-fg: #1f2328;
+  --eca-input-placeholder-fg: #8c94a0;
+
+  /* ── Borders & hover ── */
+  --eca-base-border: #dde1e6;
+  --eca-base-hover: #edf0f3;
+
+  /* ── Links ── */
+  --eca-link-fg: #007a94;
+
+  /* ── Semantic colors (darker variants for contrast on white) ── */
+  --eca-success-fg: #1f7a3a;
+  --eca-warning-fg: #9a7d00;
+  --eca-approval-fg: #b7630a;
+  --eca-error-fg: #c81f1f;
+  --eca-warning-message-fg: #9a7d00;
+  --eca-confirm-action-bg: #1f7a3a;
+  --eca-confirm-action-fg: #ffffff;
+
+  /* ── Diffs ── */
+  --eca-diff-unchanged-bg: rgba(128, 128, 128, 0.08);
+  --eca-diff-insert-bg: rgba(34, 197, 94, 0.12);
+  --eca-diff-delete-bg: rgba(239, 68, 68, 0.12);
+
+  /* ── Misc UI ── */
+  --eca-item-selectable-fg: #5c6470;
+  --eca-tooltip-bg: #2d3339;
+  --eca-tooltip-fg: #ffffff;
+
+  /* ── Toggles ── */
+  --eca-toggle-slider-bg: #a0a7b2;
+  --eca-toggle-icon-bg: #ffffff;
+  --eca-toggle-bg: #007a94;
+
+  /* ── Primary buttons ── */
+  --eca-button-primary-fg: #ffffff;
+  --eca-button-primary-bg: #007a94;
+  --eca-button-primary-border: rgba(0, 0, 0, 0.08);
+  --eca-button-primary-hover-bg: #00a5b8;
+  --eca-button-primary-active-bg: #004d5e;
+
+  /* ── Secondary buttons ── */
+  --eca-button-secondary-fg: #1f2328;
+  --eca-button-secondary-bg: transparent;
+  --eca-button-secondary-border: #dde1e6;
+  --eca-button-secondary-hover-bg: #edf0f3;
+  --eca-button-secondary-active-bg: #dde1e6;
+
+  /* ── Context chips (darker variants for contrast on white) ── */
+  --eca-context-file-fg: #b7630a;
+  --eca-context-directory-fg: #8a5a26;
+  --eca-context-web-fg: #0b66c3;
+  --eca-context-repo-map-fg: #7e45b5;
+  --eca-context-cursor-fg: #3a3f47;
+  --eca-context-mcp-resource-fg: #1f7a3a;
+
+  /* ── Sidebar ── */
+  --eca-sidebar-bg: #f1f3f5;
+
+  /* ── Brand (logo rendered in ECA teal on light backgrounds) ── */
+  --eca-logo-fg: #00a5b8;
+  /* Full opacity on light — the subtle dark-mode fade would collapse
+   * the teal into a washed cyan against the white background. */
+  --eca-logo-opacity: 1;
+  --eca-logo-opacity-hover: 1;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -318,6 +423,42 @@ html[data-editor="web"] {
   [data-editor="web"] .tool-call-card-body .inline-code {
     max-width: 100%;
     overflow-x: auto;
+  }
+
+  /* ═══ Chat subheader: slightly bigger text + icons (big mode only) ═══
+     The subheader chrome (MCPs pill, jobs/usage chips, trust toggle,
+     timeline, export, trash, settings) uses em-based padding/margin
+     in its SCSS, so bumping the container font-size scales the whole
+     strip up proportionally. Codicons are locked to 16px by the base
+     `.codicon` rule, so they don't inherit em scaling — nudge them
+     explicitly so the icons stay visually proportional to the text. */
+  [data-editor="web"] .chat-subheader {
+    font-size: 1.1em;
+  }
+  [data-editor="web"] .chat-subheader i.codicon {
+    font-size: 18px;
+  }
+
+  /* ═══ Settings & details pages: center column (big mode only) ═══
+     Without this, the settings surface (tabs, MCP cards, provider
+     cards, job cards, global config rows) stretches edge-to-edge on
+     wide monitors because nothing in eca-webview caps its width.
+     Capping the container at the same 52em used for chat keeps every
+     descendant (server-card, provider-card, job-card, settings-tabs,
+     etc.) proportional without needing per-card selectors. */
+  [data-editor="web"] .settings-container,
+  [data-editor="web"] .mcp-details-container {
+    max-width: 52em;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  /* Defensive width cap on job console output — its SCSS sets
+     max-height but no max-width, so long lines can otherwise blow
+     past the now-capped settings column. */
+  [data-editor="web"] .job-output {
+    max-width: 100%;
   }
 
 }

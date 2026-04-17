@@ -6,6 +6,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getDataDir } from './constants';
 
+/** Visual theme for the desktop shell. When the field is absent, the
+ *  renderer falls back to 'dark' (the historical default) so existing
+ *  users see no change until they explicitly pick Light. */
+export type Theme = 'light' | 'dark';
+
+export const VALID_THEMES: ReadonlyArray<Theme> = ['light', 'dark'];
+
+export function isValidTheme(value: unknown): value is Theme {
+    return typeof value === 'string' && (VALID_THEMES as readonly string[]).includes(value);
+}
+
 export interface Preferences {
     schemaVersion: 1;
     /** Absolute path to a user-provided ECA server binary. When set, the
@@ -13,6 +24,10 @@ export interface Preferences {
      *  directly. When unset or empty, the managed binary under
      *  ~/.eca-desktop/ is used (auto-downloaded from GitHub releases). */
     serverBinaryPath?: string;
+    /** UI theme for the desktop shell (Preferences window, sidebar,
+     *  welcome screen, and embedded chat webview via --eca-* overrides).
+     *  When unset, the renderer defaults to 'dark'. */
+    theme?: Theme;
 }
 
 const DEFAULT_PREFERENCES: Preferences = {
@@ -69,6 +84,11 @@ export class PreferencesStore {
             } else {
                 merged.serverBinaryPath = trimmed;
             }
+        }
+
+        // Normalize: invalid theme values -> unset (renderer falls back to 'dark').
+        if (merged.theme !== undefined && !isValidTheme(merged.theme)) {
+            delete merged.theme;
         }
 
         this.preferences = merged;

@@ -7,7 +7,7 @@ import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
 import { SessionManager } from './session-manager';
 import { SessionStore } from './session-store';
-import { PreferencesStore, Preferences } from './preferences-store';
+import { PreferencesStore, Preferences, isValidTheme } from './preferences-store';
 import { getPreferencesWindow } from './preferences-window';
 import { WorkspaceFolder } from './protocol';
 
@@ -92,6 +92,11 @@ async function main(): Promise<void> {
           return { ok: false, error: `File is not executable: ${candidate}` };
         }
       }
+    }
+
+    // Validate theme value when provided.
+    if (patch && patch.theme !== undefined && !isValidTheme(patch.theme)) {
+      return { ok: false, error: `Invalid theme: ${String(patch.theme)}` };
     }
 
     const preferences = preferencesStore.set(patch);

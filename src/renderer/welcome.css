@@ -79,15 +79,25 @@ body.welcome-active .app-content {
     margin-bottom: 32px;
 }
 
-#welcome-screen .welcome-logo img {
+/* The desktop welcome screen renders the logo as a CSS-masked <span>
+ * (.welcome-logo-icon) rather than an <img>, so it can follow the
+ * active theme via --eca-logo-fg. The earlier `filter: grayscale(10%)`
+ * step is gone because we now fully control the color ourselves. */
+#welcome-screen .welcome-logo .welcome-logo-icon {
+    display: inline-block;
     width: 160px;
     height: 160px;
-    opacity: 0.18;
+    /* Opacity is themed — see --eca-logo-opacity in theme.css. Dark
+     * keeps the subtle ghost behind the code-rain; light renders the
+     * mark at full brand strength. */
+    opacity: var(--eca-logo-opacity, 0.18);
     user-select: none;
     pointer-events: none;
-    filter: grayscale(10%);
     transition: opacity 0.4s ease;
     animation: logo-float 4s ease-in-out infinite;
+    background-color: var(--eca-logo-fg, #f8f8f8);
+    -webkit-mask: url('./logo.svg') center / contain no-repeat;
+            mask: url('./logo.svg') center / contain no-repeat;
 }
 
 @keyframes logo-float {
@@ -95,11 +105,14 @@ body.welcome-active .app-content {
     50%      { transform: translateY(-10px); }
 }
 
-#welcome-screen:hover .welcome-logo img {
-    opacity: 0.28;
+#welcome-screen:hover .welcome-logo .welcome-logo-icon {
+    opacity: var(--eca-logo-opacity-hover, 0.28);
 }
 
-/* Prevent logo-float from leaking into the webview */
+/* The embedded webview (Chat.tsx) still renders an <img> for its own
+ * welcome-logo — keep the animation suppressor targeting <img> so we
+ * don't accidentally disable the float on the desktop welcome screen
+ * (which uses <span> now). */
 #root .welcome-logo img {
     animation: none;
 }

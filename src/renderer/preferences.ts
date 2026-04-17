@@ -1,17 +1,24 @@
 /**
  * ECA Desktop — Preferences Window
  *
- * Desktop-app level preferences (server binary override; future:
- * theme, keybindings, updater behavior, …).
+ * Desktop-app level preferences (theme, server binary override; future:
+ * keybindings, updater behavior, …).
  *
  * Layout: left-nav of categories + right content pane. A new category
  * slots in by appending to CATEGORIES and adding a render* function.
  */
 export {};
 
+import { initThemeBootstrap, type Theme } from './theme-bootstrap';
+
+// Apply the persisted theme as early as possible so the Preferences
+// window paints in the correct colors on first open.
+initThemeBootstrap();
+
 interface Preferences {
     schemaVersion: 1;
     serverBinaryPath?: string;
+    theme?: Theme;
 }
 
 interface SetPreferencesResult {
@@ -122,20 +129,99 @@ const CATEGORIES: Category[] = [
         return section;
     }
 
-    // ── General section (placeholder for future prefs) ──
+    // ── General section ──
     function renderGeneral(): HTMLElement {
         const section = sectionWrapper(
             'General',
             'Application-wide preferences.',
         );
 
-        const placeholder = document.createElement('div');
-        placeholder.className = 'prefs-placeholder';
-        placeholder.textContent =
-            'Theme selection and other options will land here soon.';
-        section.appendChild(placeholder);
+        section.appendChild(renderThemeField());
 
         return section;
+    }
+
+    /** Theme selector — a native <select> with Dark / Light options.
+     *  Changes save immediately and propagate to every open window via
+     *  the preferences-updated broadcast, so the effect is visible
+     *  without needing a Save button. */
+    function renderThemeField(): HTMLElement {
+        const field = document.createElement('div');
+        field.className = 'prefs-field';
+
+        const label = document.createElement('label');
+        label.className = 'prefs-field-label';
+        label.htmlFor = 'prefs-theme-select';
+        label.textContent = 'Theme';
+        field.appendChild(label);
+
+        const row = document.createElement('div');
+        row.className = 'prefs-input-row';
+
+        const select = document.createElement('select');
+        select.id = 'prefs-theme-select';
+        select.className = 'prefs-input prefs-select';
+
+        const options: Array<{ value: Theme; label: string }> = [
+            { value: 'dark', label: 'Dark' },
+            { value: 'light', label: 'Light' },
+        ];
+        for (const opt of options) {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            select.appendChild(option);
+        }
+
+        // Current value; default to 'dark' when unset so the dropdown
+        // reflects the actual rendered theme.
+        select.value = current.theme ?? 'dark';
+
+        const message = document.createElement('div');
+        message.className = 'prefs-message';
+
+        function clearMessage(): void {
+            message.textContent = '';
+            message.classList.remove('error', 'success');
+        }
+
+        function showError(msg: string): void {
+            message.textContent = msg;
+            message.classList.remove('success');
+            message.classList.add('error');
+        }
+
+        select.addEventListener('change', async () => {
+            clearMessage();
+            const nextTheme: Theme = select.value === 'light' ? 'light' : 'dark';
+            try {
+                const result = await api!.setPreferences({ theme: nextTheme });
+                if (result.ok) {
+                    current = result.preferences ?? current;
+                    // No success banner — the theme change is itself
+                    // visible confirmation.
+                } else {
+                    showError(result.error ?? 'Could not save theme.');
+                    select.value = current.theme ?? 'dark';
+                }
+            } catch (err: any) {
+                showError(err?.message ?? 'Unexpected error while saving.');
+                select.value = current.theme ?? 'dark';
+            }
+        });
+
+        row.appendChild(select);
+        field.appendChild(row);
+
+        const hint = document.createElement('div');
+        hint.className = 'prefs-field-hint';
+        hint.textContent =
+            'Controls the appearance of the sidebar, welcome screen, preferences, and chat.';
+        field.appendChild(hint);
+
+        field.appendChild(message);
+
+        return field;
     }
 
     // ── Server section ──

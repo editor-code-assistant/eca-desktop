@@ -48,7 +48,10 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-title-group">
-                    <img class="sidebar-logo" src="../../eca-webview/dist/logo.png" alt="ECA" draggable="false">
+                    <!-- Logo rendered via CSS mask (see sidebar.css .sidebar-logo)
+                         so it can be recolored per theme from theme.css's
+                         --eca-logo-fg custom property. -->
+                    <span class="sidebar-logo" role="img" aria-label="ECA"></span>
                     <span class="sidebar-title">ECA</span>
                 </div>
                 <button id="sidebar-new-chat" class="sidebar-new-chat-btn" title="New Chat">

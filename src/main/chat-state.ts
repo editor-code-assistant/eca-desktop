@@ -35,9 +35,21 @@ export class ChatState {
 
     // ── Subagent tracking ──
 
-    /** Mark a chat as belonging to a subagent so it never appears in the sidebar. */
+    /**
+     * Mark a chat as belonging to a subagent so it never appears in the
+     * sidebar. Also cleans up any entry that had already been recorded — an
+     * entry-creating event (e.g. a metadata content event with a title) can
+     * in theory reach us before the chat/opened that tells us it's a
+     * subagent.
+     */
     markAsSubagent(chatId: string): void {
         this.subagentChatIds.add(chatId);
+        if (this.entries.has(chatId)) {
+            this.entries.delete(chatId);
+        }
+        if (this._selectedChatId === chatId) {
+            this._selectedChatId = null;
+        }
     }
 
     /** Returns true if this chat belongs to a subagent. */
@@ -48,6 +60,11 @@ export class ChatState {
     // ── Entry management ──
 
     addOrUpdateEntry(chatId: string, partial: Partial<ChatEntry>): void {
+        // Subagent chats never surface in the sidebar — guarding here (rather
+        // than at each call site) keeps all entry-creating code paths safe
+        // without each caller having to remember the rule.
+        if (this.subagentChatIds.has(chatId)) return;
+
         const existing = this.entries.get(chatId);
         // updatedAt policy:
         // - explicit value from the caller always wins,

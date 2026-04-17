@@ -8,6 +8,12 @@
 // Make this file a module so `declare global` works
 export {};
 
+import { initThemeBootstrap } from './theme-bootstrap';
+
+// Apply the persisted theme to the main window before we render any
+// sidebar chrome so the first paint is correct.
+initThemeBootstrap();
+
 // ── Type declarations for the preload API ──
 
 interface ChatEntry {

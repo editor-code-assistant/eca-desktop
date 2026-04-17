@@ -1,6 +1,54 @@
 "use strict";
 (() => {
+  // src/renderer/theme-bootstrap.ts
+  var VALID_THEMES = ["light", "dark"];
+  var THEME_CACHE_KEY = "eca-desktop-theme-cache";
+  var DEFAULT_THEME = "dark";
+  function resolveTheme(value) {
+    return typeof value === "string" && VALID_THEMES.includes(value) ? value : DEFAULT_THEME;
+  }
+  function readCachedTheme() {
+    try {
+      return resolveTheme(localStorage.getItem(THEME_CACHE_KEY));
+    } catch {
+      return DEFAULT_THEME;
+    }
+  }
+  function writeCachedTheme(theme) {
+    try {
+      localStorage.setItem(THEME_CACHE_KEY, theme);
+    } catch {
+    }
+  }
+  function applyTheme(theme) {
+    const html = document.documentElement;
+    if (html.getAttribute("data-editor") !== "web") {
+      html.setAttribute("data-editor", "web");
+    }
+    html.setAttribute("data-theme", theme);
+    writeCachedTheme(theme);
+  }
+  function initThemeBootstrap() {
+    const holder = window;
+    if (holder.__ecaThemeBootstrapInitialized) return;
+    holder.__ecaThemeBootstrapInitialized = true;
+    applyTheme(readCachedTheme());
+    const api = window.ecaDesktop;
+    if (!api || typeof api.getPreferences !== "function") {
+      return;
+    }
+    api.getPreferences().then((prefs) => applyTheme(resolveTheme(prefs?.theme))).catch((err) => {
+      console.error("[ThemeBootstrap] Failed to load preferences:", err);
+    });
+    if (typeof api.onPreferencesUpdated === "function") {
+      api.onPreferencesUpdated((prefs) => {
+        applyTheme(resolveTheme(prefs?.theme));
+      });
+    }
+  }
+
   // src/renderer/preferences.ts
+  initThemeBootstrap();
   var CATEGORIES = [
     {
       id: "general",
@@ -63,11 +111,68 @@
         "General",
         "Application-wide preferences."
       );
-      const placeholder = document.createElement("div");
-      placeholder.className = "prefs-placeholder";
-      placeholder.textContent = "Theme selection and other options will land here soon.";
-      section.appendChild(placeholder);
+      section.appendChild(renderThemeField());
       return section;
+    }
+    function renderThemeField() {
+      const field = document.createElement("div");
+      field.className = "prefs-field";
+      const label = document.createElement("label");
+      label.className = "prefs-field-label";
+      label.htmlFor = "prefs-theme-select";
+      label.textContent = "Theme";
+      field.appendChild(label);
+      const row = document.createElement("div");
+      row.className = "prefs-input-row";
+      const select = document.createElement("select");
+      select.id = "prefs-theme-select";
+      select.className = "prefs-input prefs-select";
+      const options = [
+        { value: "dark", label: "Dark" },
+        { value: "light", label: "Light" }
+      ];
+      for (const opt of options) {
+        const option = document.createElement("option");
+        option.value = opt.value;
+        option.textContent = opt.label;
+        select.appendChild(option);
+      }
+      select.value = current.theme ?? "dark";
+      const message = document.createElement("div");
+      message.className = "prefs-message";
+      function clearMessage() {
+        message.textContent = "";
+        message.classList.remove("error", "success");
+      }
+      function showError(msg) {
+        message.textContent = msg;
+        message.classList.remove("success");
+        message.classList.add("error");
+      }
+      select.addEventListener("change", async () => {
+        clearMessage();
+        const nextTheme = select.value === "light" ? "light" : "dark";
+        try {
+          const result = await api.setPreferences({ theme: nextTheme });
+          if (result.ok) {
+            current = result.preferences ?? current;
+          } else {
+            showError(result.error ?? "Could not save theme.");
+            select.value = current.theme ?? "dark";
+          }
+        } catch (err) {
+          showError(err?.message ?? "Unexpected error while saving.");
+          select.value = current.theme ?? "dark";
+        }
+      });
+      row.appendChild(select);
+      field.appendChild(row);
+      const hint = document.createElement("div");
+      hint.className = "prefs-field-hint";
+      hint.textContent = "Controls the appearance of the sidebar, welcome screen, preferences, and chat.";
+      field.appendChild(hint);
+      field.appendChild(message);
+      return field;
     }
     function renderServer() {
       const section = sectionWrapper(

@@ -125,9 +125,18 @@ export function createBridge(
         };
 
         conn.onNotification(rpc.chatContentReceived, (params) => {
+            // A content event that carries parentChatId can only belong to a
+            // subagent — flag it up front so the sidebar never sees it, even
+            // if the chat/opened that would normally flag it is late (e.g.
+            // during a chat/open replay).
+            if (params.parentChatId) {
+                session.chatState.markAsSubagent(params.chatId);
+            }
+
             session.chatState.pushContentEvent(params.chatId, params);
 
-            // Update sidebar title when metadata arrives
+            // Update sidebar title when metadata arrives. addOrUpdateEntry is
+            // a no-op for subagents, so we don't need an explicit guard here.
             const content = (params as Record<string, unknown>).content as
                 | { type?: string; title?: string }
                 | undefined;

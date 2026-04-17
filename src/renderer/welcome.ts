@@ -6,6 +6,13 @@
  */
 export {};
 
+import { initThemeBootstrap } from './theme-bootstrap';
+
+// Idempotent — safe to call alongside sidebar.ts which also invokes it.
+// Keeps the welcome screen painting in the correct theme even if the
+// sidebar bundle ever loads after this one.
+initThemeBootstrap();
+
 interface RecentWorkspace {
     uri: string;
     name: string;
@@ -236,7 +243,9 @@ declare global {
     function render(): void {
         if (hasSessions) {
             root.style.display = '';
-            const logo = welcomeScreen.querySelector('.welcome-logo img') as HTMLElement;
+            const logo = welcomeScreen.querySelector(
+                '.welcome-logo .welcome-logo-icon',
+            ) as HTMLElement | null;
             if (logo) logo.style.animation = 'none';
             welcomeScreen.classList.add('fade-out');
             setTimeout(() => {
@@ -264,15 +273,19 @@ declare global {
         const card = document.createElement('div');
         card.className = 'welcome-card';
 
-        // Logo
+        // Logo — rendered as a CSS-masked <span> so the mark follows the
+        // active theme (see .welcome-logo-icon in welcome.css). Switching
+        // away from <img> means we no longer depend on the eca-webview
+        // dist PNG at runtime, and the color can adapt per theme via
+        // the --eca-logo-fg custom property.
         const logoWrap = document.createElement('div');
         logoWrap.className = 'welcome-logo';
 
-        const logoImg = document.createElement('img');
-        logoImg.src = ((window as any).mediaUrl || '../../eca-webview/dist') + '/logo.png';
-        logoImg.alt = '';
-        logoImg.draggable = false;
-        logoWrap.appendChild(logoImg);
+        const logoIcon = document.createElement('span');
+        logoIcon.className = 'welcome-logo-icon';
+        logoIcon.setAttribute('role', 'img');
+        logoIcon.setAttribute('aria-label', 'ECA');
+        logoWrap.appendChild(logoIcon);
         card.appendChild(logoWrap);
 
         // Title — animated "Editor Code Assistant" → "ECA"

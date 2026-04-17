@@ -312,4 +312,40 @@ describe('ChatState', () => {
             expect(state.hasBeenOpened('warm')).toBe(true);
         });
     });
+
+    describe('subagent guard', () => {
+        it('addOrUpdateEntry becomes a no-op once a chat is marked as a subagent', () => {
+            state.markAsSubagent('sub-1');
+            state.addOrUpdateEntry('sub-1', { title: 'Should not appear' });
+            const ids = state.getChatListUpdate().entries.map(e => e.id);
+            expect(ids).not.toContain('sub-1');
+        });
+
+        it('markAsSubagent removes an entry that was already recorded', () => {
+            // Simulate the race: a metadata event creates the entry before
+            // we learn the chat is a subagent.
+            state.addOrUpdateEntry('late', { title: 'Leaked title' });
+            expect(state.getChatListUpdate().entries.map(e => e.id)).toContain('late');
+
+            state.markAsSubagent('late');
+            expect(state.getChatListUpdate().entries.map(e => e.id)).not.toContain('late');
+        });
+
+        it('markAsSubagent clears selectedChatId when it matched the removed entry', () => {
+            state.addOrUpdateEntry('late', { title: 'Leaked' });
+            state.selectedChatId = 'late';
+
+            state.markAsSubagent('late');
+            expect(state.selectedChatId).toBeNull();
+        });
+
+        it('markAsSubagent leaves selectedChatId alone when it points elsewhere', () => {
+            state.addOrUpdateEntry('keep', { title: 'Keep me' });
+            state.addOrUpdateEntry('late', { title: 'Leaked' });
+            state.selectedChatId = 'keep';
+
+            state.markAsSubagent('late');
+            expect(state.selectedChatId).toBe('keep');
+        });
+    });
 });

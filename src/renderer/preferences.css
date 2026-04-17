@@ -159,6 +159,29 @@ body.platform-darwin .prefs-root {
     border-color: var(--eca-error-fg);
 }
 
+/* Native <select> inside a .prefs-input field — swap to the shell font
+   (monospace looks strange for labels) and draw a custom chevron so the
+   dropdown visually matches the rest of the preferences UI in both
+   themes. The chevron color tracks --eca-item-selectable-fg via an SVG
+   currentColor trick is unnecessary here since we encode the hex at
+   build time — pick a neutral mid-gray that reads on both palettes. */
+.prefs-select {
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%238a8f98'><path d='M5 8l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+}
+
+.prefs-select option {
+    background: var(--eca-input-bg);
+    color: var(--eca-input-fg);
+}
+
 .prefs-btn {
     display: inline-flex;
     align-items: center;

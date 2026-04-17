@@ -41,11 +41,21 @@
     gap: 6px;
 }
 
+/* Sidebar header logo.
+ *
+ * Rendered as a masked <span> rather than <img> so it can follow the
+ * active theme: the SVG shape clips the element, and background-color
+ * paints the visible silhouette in --eca-logo-fg (near-white on dark,
+ * ECA teal on light). See theme.css for the per-theme values. */
 .sidebar-logo {
     width: 16px;
     height: 16px;
-    object-fit: contain;
+    display: inline-block;
+    flex-shrink: 0;
     -webkit-app-region: no-drag;
+    background-color: var(--eca-logo-fg, #f8f8f8);
+    -webkit-mask: url('./logo.svg') center / contain no-repeat;
+            mask: url('./logo.svg') center / contain no-repeat;
 }
 
 .sidebar-title {
