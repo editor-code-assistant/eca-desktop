@@ -179,7 +179,33 @@ export function createBridge(
 
         conn.onNotification(rpc.chatDeleted, (params) => {
             sendToRenderer('chat/deleted', params.chatId);
+
+            // If we're deleting the chat the user is currently viewing, fall
+            // forward to a sibling so they don't end up staring at an empty
+            // chat panel. We capture sidebar order *before* removal so we can
+            // pick the entry that takes the deleted slot's index — i.e. the
+            // chat immediately below — and gracefully fall back to the one
+            // above (idx-1) if the deleted chat was the bottom of the list.
+            const wasSelected = session.chatState.selectedChatId === params.chatId;
+            const before = wasSelected
+                ? session.chatState.getChatListUpdate().entries
+                    .filter(e => e.id !== PENDING_CHAT_ID)
+                    .map(e => e.id)
+                : [];
+            const idx = wasSelected ? before.indexOf(params.chatId) : -1;
+
             session.chatState.removeEntry(params.chatId);
+
+            if (wasSelected) {
+                const after = session.chatState.getChatListUpdate().entries
+                    .filter(e => e.id !== PENDING_CHAT_ID)
+                    .map(e => e.id);
+                const next = after[idx] ?? after[idx - 1] ?? null;
+                if (next) {
+                    selectChatInSession(session, next);
+                    return;
+                }
+            }
             sendChatListUpdate();
         });
 
@@ -332,6 +358,45 @@ export function createBridge(
         }
     }
 
+    /**
+     * Activate `session` and switch its current selection to `chatId`.
+     *
+     * Mirrors what the `chat-select` IPC handler does for a real (non-pending)
+     * chat: makes the session active, marks the chat as selected, replays
+     * session-scoped context (workspace, MCP, config, providers), hydrates
+     * cold chats via `chat/open`, then notifies the renderer and refreshes
+     * the sidebar. Extracted so callers other than the user-driven sidebar
+     * click (e.g. auto-selecting a sibling after deletion) get the same
+     * end-to-end behavior without duplication.
+     */
+    function selectChatInSession(session: Session, chatId: string): void {
+        sessionManager.activeSessionId = session.id;
+        session.chatState.selectedChatId = chatId;
+        sendSessionContext(session);
+
+        // Cold chat — loaded from chat/list but never opened in this client
+        // run. Ask the server to replay chat/cleared + chat/opened +
+        // chat/contentReceived so the existing notification handlers
+        // populate the webview.
+        if (!session.chatState.hasBeenOpened(chatId)) {
+            const conn = session.ecaServer.connection;
+            if (conn) {
+                conn.sendRequest(rpc.chatOpen, { chatId })
+                    .then((result) => {
+                        if (!result?.found) {
+                            console.warn('[Bridge] chat/open reported chat not found:', chatId);
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('[Bridge] chat/open failed:', err);
+                    });
+            }
+        }
+
+        sendToRenderer('chat/selectChat', chatId);
+        sendChatListUpdate();
+    }
+
     // ── Sidebar IPC ──
 
     ipcMain.on('chat-select', (_event, chatId: string) => {
@@ -354,31 +419,12 @@ export function createBridge(
 
         const session = sessionManager.getSessionForChat(chatId);
         if (session) {
-            sessionManager.activeSessionId = session.id;
-            session.chatState.selectedChatId = chatId;
-            sendSessionContext(session);
-
-            // Cold chat — loaded from chat/list but never opened in this
-            // client run. Ask the server to replay chat/cleared + chat/opened
-            // + chat/contentReceived so the existing notification handlers
-            // populate the webview.
-            if (!session.chatState.hasBeenOpened(chatId)) {
-                const conn = session.ecaServer.connection;
-                if (conn) {
-                    conn.sendRequest(rpc.chatOpen, { chatId })
-                        .then((result) => {
-                            if (!result?.found) {
-                                console.warn('[Bridge] chat/open reported chat not found:', chatId);
-                            }
-                        })
-                        .catch((err) => {
-                            console.error('[Bridge] chat/open failed:', err);
-                        });
-                }
-            }
+            selectChatInSession(session, chatId);
+        } else {
+            // Session not found — at least keep the renderer in sync.
+            sendToRenderer('chat/selectChat', chatId);
+            sendChatListUpdate();
         }
-        sendToRenderer('chat/selectChat', chatId);
-        sendChatListUpdate();
     });
 
     ipcMain.on('chat-new', (_event, data?: { sessionId?: string }) => {
