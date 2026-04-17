@@ -42,6 +42,11 @@ interface SessionListUpdate {
     activeSessionId: string | null;
 }
 
+interface ChatNavigatePayload {
+    direction: 'next' | 'prev' | 'index';
+    index?: number;
+}
+
 interface EcaDesktopApi {
     send: (message: unknown) => void;
     onMessage: (callback: (message: unknown) => void) => void;
@@ -51,6 +56,10 @@ interface EcaDesktopApi {
     removeChatListListener: (callback: (data: ChatListUpdate) => void) => void;
     onSidebarToggle: (callback: () => void) => void;
     removeSidebarToggleListener: (callback: () => void) => void;
+    onChatNavigate: (callback: (data: ChatNavigatePayload) => void) => void;
+    removeChatNavigateListener: (callback: (data: ChatNavigatePayload) => void) => void;
+    onTriggerCreateSession: (callback: () => void) => void;
+    removeTriggerCreateSessionListener: (callback: () => void) => void;
     selectChat: (chatId: string) => void;
     newChat: (sessionId?: string) => void;
     deleteChat: (chatId: string) => void;
@@ -441,6 +450,45 @@ declare global {
 
         window.ecaDesktop.onSidebarToggle(() => {
             toggleSidebar();
+        });
+
+        // Keyboard-driven chat navigation (Ctrl+Tab / Ctrl+Shift+Tab /
+        // CmdOrCtrl+1..9). The sidebar owns the authoritative chat ordering
+        // — main computes nothing, it just relays intent — so we resolve the
+        // target chatId here from the current `entries` list and dispatch
+        // the normal selection path.
+        window.ecaDesktop.onChatNavigate((data) => {
+            if (entries.length === 0) return;
+
+            const currentIdx = selectedId
+                ? entries.findIndex(e => e.id === selectedId)
+                : -1;
+            let targetIdx: number;
+
+            if (data.direction === 'next') {
+                targetIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % entries.length;
+            } else if (data.direction === 'prev') {
+                targetIdx = currentIdx === -1
+                    ? entries.length - 1
+                    : (currentIdx - 1 + entries.length) % entries.length;
+            } else if (data.direction === 'index' && typeof data.index === 'number') {
+                if (data.index < 0 || data.index >= entries.length) return;
+                targetIdx = data.index;
+            } else {
+                return;
+            }
+
+            const target = entries[targetIdx];
+            if (target && target.id !== selectedId) {
+                window.ecaDesktop?.selectChat(target.id);
+            }
+        });
+
+        // "New Session…" menu item → trigger the same open-folder dialog
+        // path as the sidebar's folder button. Main will post back a
+        // `session-create` IPC with the selected folder.
+        window.ecaDesktop.onTriggerCreateSession(() => {
+            window.ecaDesktop?.createSession();
         });
 
         window.ecaDesktop.onSessionListUpdate((data: SessionListUpdate) => {

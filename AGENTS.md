@@ -1,1 +1,2 @@
 - `npm run dev` starts the project listening to changes
+- `npm version <patch|minor|major>` to tag for a new release

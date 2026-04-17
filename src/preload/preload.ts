@@ -21,6 +21,21 @@ ipcRenderer.on('sidebar-toggle', () => {
     sidebarToggleListeners.forEach(cb => cb());
 });
 
+// Chat navigation (Next/Prev/Jump-to-N) — computed by the sidebar based on
+// its authoritative chat list, then dispatched back via `selectChat`.
+type ChatNavigatePayload = { direction: 'next' | 'prev' | 'index'; index?: number };
+const chatNavigateListeners: ((data: ChatNavigatePayload) => void)[] = [];
+ipcRenderer.on('chat-navigate', (_event, data: ChatNavigatePayload) => {
+    chatNavigateListeners.forEach(cb => cb(data));
+});
+
+// Trigger the native "Open Workspace Folder" dialog from the menu. Routed
+// through the renderer so it reuses the existing `createSession` IPC path.
+const triggerCreateSessionListeners: VoidCallback[] = [];
+ipcRenderer.on('trigger-create-session', () => {
+    triggerCreateSessionListeners.forEach(cb => cb());
+});
+
 // Session: list update listeners
 const sessionListListeners: MessageCallback[] = [];
 ipcRenderer.on('session-list-update', (_event, data) => {
@@ -74,6 +89,22 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
         if (index !== -1) {
             sidebarToggleListeners.splice(index, 1);
         }
+    },
+    // ── Chat navigation (Next/Prev/Jump-to-N) from the menu ──
+    onChatNavigate: (callback: (data: ChatNavigatePayload) => void) => {
+        chatNavigateListeners.push(callback);
+    },
+    removeChatNavigateListener: (callback: (data: ChatNavigatePayload) => void) => {
+        const index = chatNavigateListeners.indexOf(callback);
+        if (index !== -1) chatNavigateListeners.splice(index, 1);
+    },
+    // ── "New Session" menu item → open-folder dialog ──
+    onTriggerCreateSession: (callback: VoidCallback) => {
+        triggerCreateSessionListeners.push(callback);
+    },
+    removeTriggerCreateSessionListener: (callback: VoidCallback) => {
+        const index = triggerCreateSessionListeners.indexOf(callback);
+        if (index !== -1) triggerCreateSessionListeners.splice(index, 1);
     },
     selectChat: (chatId: string) => {
         ipcRenderer.send('chat-select', chatId);
