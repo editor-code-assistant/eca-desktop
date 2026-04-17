@@ -1,5 +1,6 @@
 {
   "name": "eca-desktop",
+  "productName": "ECA",
   "version": "0.4.2",
   "description": "ECA Desktop - AI Code Assistant",
   "author": "Editor Code Assistant",
