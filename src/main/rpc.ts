@@ -6,6 +6,8 @@ import {
     ChatFlagParams,
     ChatForkParams,
     ChatUpdateParams,
+    ChatListParams, ChatListResponse,
+    ChatOpenParams, ChatOpenResponse,
     QueryContextParams, QueryContextResult,
     QueryCommandsParams, QueryCommandsResult,
     QueryFilesParams, QueryFilesResult,
@@ -47,6 +49,8 @@ export const chatAddFlag = new rpc.RequestType<ChatFlagParams, void, void>('chat
 export const chatRemoveFlag = new rpc.RequestType<ChatFlagParams, void, void>('chat/removeFlag');
 export const chatFork = new rpc.RequestType<ChatForkParams, void, void>('chat/fork');
 export const chatUpdate = new rpc.RequestType<ChatUpdateParams, void, void>('chat/update');
+export const chatList = new rpc.RequestType<ChatListParams, ChatListResponse, void>('chat/list');
+export const chatOpen = new rpc.RequestType<ChatOpenParams, ChatOpenResponse, void>('chat/open');
 export const chatQueryContext = new rpc.RequestType<QueryContextParams, QueryContextResult, void>('chat/queryContext');
 export const chatQueryCommands = new rpc.RequestType<QueryCommandsParams, QueryCommandsResult, void>('chat/queryCommands');
 export const chatQueryFiles = new rpc.RequestType<QueryFilesParams, QueryFilesResult, void>('chat/queryFiles');

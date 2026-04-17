@@ -33,6 +33,12 @@ ipcRenderer.on('welcome-data', (_event, data) => {
     welcomeDataListeners.forEach(cb => cb(data));
 });
 
+// Preferences: update listeners
+const preferencesUpdatedListeners: MessageCallback[] = [];
+ipcRenderer.on('preferences-updated', (_event, data) => {
+    preferencesUpdatedListeners.forEach(cb => cb(data));
+});
+
 // Expose API to the renderer via contextBridge
 contextBridge.exposeInMainWorld('ecaDesktop', {
     // ── Server message transport ──
@@ -99,5 +105,17 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
     removeWelcomeDataListener: (callback: MessageCallback) => {
         const index = welcomeDataListeners.indexOf(callback);
         if (index !== -1) welcomeDataListeners.splice(index, 1);
+    },
+
+    // ── Preferences (request/response via invoke/handle) ──
+    getPreferences: () => ipcRenderer.invoke('preferences:get'),
+    setPreferences: (patch: any) => ipcRenderer.invoke('preferences:set', patch),
+    pickServerBinary: () => ipcRenderer.invoke('preferences:pick-binary'),
+    onPreferencesUpdated: (callback: MessageCallback) => {
+        preferencesUpdatedListeners.push(callback);
+    },
+    removePreferencesUpdatedListener: (callback: MessageCallback) => {
+        const index = preferencesUpdatedListeners.indexOf(callback);
+        if (index !== -1) preferencesUpdatedListeners.splice(index, 1);
     },
 });

@@ -153,8 +153,171 @@ html[data-editor="web"] {
     border-color: color-mix(in srgb, var(--eca-approval-fg, #e8850c) 35%, transparent);
     box-shadow: none;
   }
+  /* Hero (empty-state) focus — the welcome view is the user's landing
+     surface, so we let the focus ring breathe with a soft teal glow
+     tied to --eca-link-fg (the same color as the border). A tight
+     inner ring + a diffuse outer bloom makes the whole card look lit
+     from the border, not framed by a hard line. */
+  [data-editor="web"] .prompt-area.hero.focused {
+    border-color: color-mix(in srgb, var(--eca-link-fg) 55%, transparent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--eca-link-fg) 14%, transparent),
+      0 8px 32px color-mix(in srgb, var(--eca-link-fg) 18%, transparent);
+  }
   [data-editor="web"] .prompt-area .field {
     background: transparent;
+  }
+
+  /* ═══ Chat messages: contained, chat-like blocks (big mode only) ═══
+     Keep the 52em column, but cap each message block so the chat reads
+     like a chat, not a full-width log. User messages become right-aligned
+     bubbles; agent-side blocks (tool calls, reasoning, hooks, subagent)
+     keep their left accent border and sit at the start of the column. */
+
+  /* More vertical breathing room + tiny horizontal gutter */
+  [data-editor="web"] .messages-container {
+    padding-inline: 0.25em;
+    gap: 1em;
+  }
+
+  /* User messages — right-aligned chat bubble that hugs its content.
+     Each message is wrapped in an unclassed motion.div inside
+     .messages-container, so align-self can't reach the card. Instead:
+       width: fit-content  → shrink to content
+       max-width: 36em     → wrap past the reading cap
+       margin-left: auto   → push to the right within the wrapper */
+  [data-editor="web"] .user-message-card {
+    width: fit-content;
+    max-width: 36em;
+    margin-left: auto;
+    margin-right: 0;
+    border-left: none;
+    border-radius: 12px;
+    padding: 0.55em 0.8em;
+    transition: max-width 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* Keep code inside the bubble contained */
+  [data-editor="web"] .user-message-card pre,
+  [data-editor="web"] .user-message-card .inline-code {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Assistant text — small gutter so it doesn't hug the column edge */
+  [data-editor="web"] .assistant-message {
+    padding-inline: 0.25em;
+  }
+
+  /* Agent-side cards (tool calls, reasoning, hooks, subagent) —
+     Compact chip when collapsed, extended card when expanded.
+
+     - Shape: fully rounded (10px) with a thin, softened outline on
+       top/right/bottom. The 2px status-colored border-left from
+       base SCSS cascades through, becoming a rounded accent on the
+       card's left edge.
+     - Width: content-sized when collapsed (chip feel). When the
+       body mounts (`:has(> .*-card-body)`), min-width jumps to
+       100% so the card extends to fill the column (up to 44em),
+       and a gentle drop shadow lifts it off the chat surface.
+     - State tint: when a card is active/succeeded/failed/etc.,
+       the outer border picks up the status color at low alpha so
+       the whole perimeter reads as the state, not just the left.
+     - AnimatePresence mounts/unmounts the body; no TSX change. */
+  [data-editor="web"] .tool-call-card,
+  [data-editor="web"] .reason-card,
+  [data-editor="web"] .collapsable,
+  [data-editor="web"] .subagent-card,
+  [data-editor="web"] .flag-banner,
+  [data-editor="web"] .chat-question {
+    width: fit-content;
+    min-width: 0;
+    max-width: 44em;
+    margin-right: auto;
+    border-top: 1px solid color-mix(in srgb, var(--eca-base-border) 75%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--eca-base-border) 75%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--eca-base-border) 75%, transparent);
+    border-radius: 0;
+    transition: min-width 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                max-width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                background 200ms ease,
+                border-color 200ms ease,
+                box-shadow 220ms ease;
+  }
+
+  /* Expanded — body mounted: extend to fill the column, add gentle lift */
+  [data-editor="web"] .tool-call-card:has(> .tool-call-card-body),
+  [data-editor="web"] .reason-card:has(> .reason-card-body),
+  [data-editor="web"] .subagent-card:has(> .subagent-card-body),
+  [data-editor="web"] .collapsable:has(> .content) {
+    min-width: 100%;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--eca-base-bg) 60%, transparent);
+  }
+
+  /* State-tinted outer borders — only for reasoning (while thinking)
+     and subagent. Tool-call outer borders stay neutral grey so status
+     is signaled purely by the 2px left accent from base SCSS — this
+     matches the default grey look of reasoning cards. */
+  [data-editor="web"] .reason-card.active {
+    border-top-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
+    border-right-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
+    border-bottom-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
+  }
+  [data-editor="web"] .subagent-card.failed,
+  [data-editor="web"] .subagent-card.rejected {
+    border-top-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
+    border-right-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
+    border-bottom-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
+  }
+  /* Subagent purple lives in an SCSS var; hardcode the hex here */
+  [data-editor="web"] .subagent-card.active {
+    border-top-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
+    border-right-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
+    border-bottom-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
+  }
+
+  /* Collapsed — strip top/right/bottom borders so the chip reads as
+     inline, leaving only the 2px left accent from base SCSS. When the
+     body mounts (`:has()` flips), the base shorthand above paints the
+     soft grey outline back in, signaling "this is a card now". Flag
+     and chat-question never expand, so they always match. */
+  [data-editor="web"] .tool-call-card:not(:has(> .tool-call-card-body)),
+  [data-editor="web"] .reason-card:not(:has(> .reason-card-body)),
+  [data-editor="web"] .subagent-card:not(:has(> .subagent-card-body)),
+  [data-editor="web"] .collapsable:not(:has(> .content)),
+  [data-editor="web"] .flag-banner,
+  [data-editor="web"] .chat-question {
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  /* Tighter header padding for chip feel */
+  [data-editor="web"] .tool-call-card > .tool-call-card-header,
+  [data-editor="web"] .reason-card > .reason-card-header,
+  [data-editor="web"] .subagent-card > .subagent-card-header,
+  [data-editor="web"] .collapsable > .header {
+    padding: 0.35em 0.7em 0.35em 0.55em;
+  }
+
+  /* Subtle hover when collapsed (the chip is fully clickable).
+     When expanded, no bg shift on hover so body content stays calm. */
+  [data-editor="web"] .tool-call-card:not(:has(> .tool-call-card-body)):hover,
+  [data-editor="web"] .reason-card:not(:has(> .reason-card-body)):hover,
+  [data-editor="web"] .subagent-card:not(:has(> .subagent-card-body)):hover,
+  [data-editor="web"] .collapsable:not(:has(> .content)):hover {
+    background: color-mix(in srgb, var(--eca-base-bg) 92%, var(--eca-fg) 8%);
+  }
+
+  /* Thought / reasoning — italic label for a meta feel */
+  [data-editor="web"] .reason-card .reason-label {
+    font-style: italic;
+  }
+
+  /* Contain code/pre inside tool-call bodies */
+  [data-editor="web"] .tool-call-card-body pre,
+  [data-editor="web"] .tool-call-card-body .inline-code {
+    max-width: 100%;
+    overflow-x: auto;
   }
 
 }

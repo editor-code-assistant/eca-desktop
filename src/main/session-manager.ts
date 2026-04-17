@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { EcaServer, EcaServerStatus } from './server';
 import { ChatState } from './chat-state';
+import { PreferencesStore } from './preferences-store';
 import { WorkspaceFolder, ChatEntry, SessionInfo, SessionListUpdate, RecentWorkspace } from './protocol';
 
 export interface Session {
@@ -18,6 +19,10 @@ export interface Session {
 export class SessionManager extends EventEmitter {
     private sessions = new Map<string, Session>();
     private _activeSessionId: string | null = null;
+
+    constructor(private preferencesStore?: PreferencesStore) {
+        super();
+    }
 
     get activeSessionId(): string | null {
         return this._activeSessionId;
@@ -34,7 +39,7 @@ export class SessionManager extends EventEmitter {
 
     createSession(workspaceFolder: WorkspaceFolder): Session {
         const id = crypto.randomUUID();
-        const ecaServer = new EcaServer();
+        const ecaServer = new EcaServer(this.preferencesStore);
         const chatState = new ChatState([workspaceFolder]);
 
         const session: Session = { id, workspaceFolder, ecaServer, chatState };

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
 import { DOCS_URL, ISSUES_URL } from './constants';
+import { openPreferencesWindow } from './preferences-window';
 
 export function createMenu(mainWindow: BrowserWindow) {
     const isMac = process.platform === 'darwin';
@@ -10,6 +11,12 @@ export function createMenu(mainWindow: BrowserWindow) {
             label: app.name,
             submenu: [
                 { role: 'about' as const },
+                { type: 'separator' as const },
+                {
+                    label: 'Preferences…',
+                    accelerator: 'Cmd+,',
+                    click: () => openPreferencesWindow(mainWindow),
+                },
                 { type: 'separator' as const },
                 { role: 'services' as const },
                 { type: 'separator' as const },
@@ -34,8 +41,16 @@ export function createMenu(mainWindow: BrowserWindow) {
                         });
                     },
                 },
-                { type: 'separator' },
-                isMac ? { role: 'close' } : { role: 'quit' },
+                ...(isMac ? [] : [
+                    { type: 'separator' as const },
+                    {
+                        label: 'Preferences…',
+                        accelerator: 'Ctrl+,',
+                        click: () => openPreferencesWindow(mainWindow),
+                    },
+                ]),
+                { type: 'separator' as const },
+                isMac ? { role: 'close' as const } : { role: 'quit' as const },
             ],
         },
 

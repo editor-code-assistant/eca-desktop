@@ -325,6 +325,25 @@ export function createBridge(
             sessionManager.activeSessionId = session.id;
             session.chatState.selectedChatId = chatId;
             sendSessionContext(session);
+
+            // Cold chat — loaded from chat/list but never opened in this
+            // client run. Ask the server to replay chat/cleared + chat/opened
+            // + chat/contentReceived so the existing notification handlers
+            // populate the webview.
+            if (!session.chatState.hasBeenOpened(chatId)) {
+                const conn = session.ecaServer.connection;
+                if (conn) {
+                    conn.sendRequest(rpc.chatOpen, { chatId })
+                        .then((result) => {
+                            if (!result?.found) {
+                                console.warn('[Bridge] chat/open reported chat not found:', chatId);
+                            }
+                        })
+                        .catch((err) => {
+                            console.error('[Bridge] chat/open failed:', err);
+                        });
+                }
+            }
         }
         sendToRenderer('chat/selectChat', chatId);
         sendChatListUpdate();
@@ -364,5 +383,32 @@ export function createBridge(
         }
     });
 
-    return { registerServerNotifications, sendSessionListUpdate, sendChatListUpdate };
+    /**
+     * After a session's ECA server has initialized (i.e. `start()` resolved and
+     * status is Running), ask the server for the set of persisted chats in the
+     * workspace DB and populate the sidebar. Failures are logged and swallowed
+     * so an older server binary without `chat/list` support (or a transient
+     * RPC error) doesn't break session creation — the sidebar simply stays
+     * empty as it did before, and the user can still start a new chat.
+     */
+    async function loadSessionChats(session: Session): Promise<void> {
+        const conn = session.ecaServer.connection;
+        if (!conn) return;
+
+        try {
+            const { chats } = await conn.sendRequest(rpc.chatList, {});
+            if (!chats?.length) return;
+            session.chatState.addServerKnownEntries(chats);
+            sendChatListUpdate();
+        } catch (err) {
+            console.warn('[Bridge] chat/list failed (sidebar not auto-populated):', err);
+        }
+    }
+
+    return {
+        registerServerNotifications,
+        sendSessionListUpdate,
+        sendChatListUpdate,
+        loadSessionChats,
+    };
 }

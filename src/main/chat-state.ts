@@ -3,7 +3,7 @@
 // ============================================================
 
 import { BrowserWindow } from 'electron';
-import { ChatEntry, ChatOpenedParams, ChatContentReceivedParams, WorkspaceFolder } from './protocol';
+import { ChatEntry, ChatOpenedParams, ChatContentReceivedParams, ChatSummary, WorkspaceFolder } from './protocol';
 
 /** Sentinel ID for the placeholder "New Chat" sidebar entry before a prompt is sent. */
 export const PENDING_CHAT_ID = '__pending_new_chat__';
@@ -55,6 +55,45 @@ export class ChatState {
             status: partial.status ?? existing?.status ?? 'idle',
             workspaceFolderName: partial.workspaceFolderName ?? this.workspaceFolderName,
         });
+    }
+
+    /**
+     * Populate the sidebar with chat summaries returned by `chat/list`.
+     *
+     * Intended for app start-up: server-known chats appear in the sidebar
+     * immediately, without their message history. The payloads/contentEvents
+     * caches are intentionally left untouched — selecting one of these
+     * "cold" entries should trigger a `chat/open` so the server streams the
+     * content via the normal notification channels.
+     *
+     * Existing entries for the same chatId keep any richer state they already
+     * have (e.g. a `generating` status from a live stream): we only fill in
+     * fields that are currently missing.
+     */
+    addServerKnownEntries(summaries: ChatSummary[]): void {
+        for (const summary of summaries) {
+            if (this.subagentChatIds.has(summary.id)) continue;
+            const existing = this.entries.get(summary.id);
+            // If there's already a richer entry (e.g. live generating chat),
+            // keep its status/title unless we have nothing yet.
+            this.entries.set(summary.id, {
+                id: summary.id,
+                title: existing?.title ?? summary.title ?? 'New Chat',
+                status: existing?.status ?? summary.status ?? 'idle',
+                workspaceFolderName: existing?.workspaceFolderName ?? this.workspaceFolderName,
+            });
+        }
+    }
+
+    /**
+     * Whether this chat has been "opened" in the current client run — i.e. we
+     * have a cached `chat/opened` payload so its content events should already
+     * be in memory (or will arrive as the stream progresses). Used to decide
+     * whether a sidebar click needs to trigger `chat/open` on the server to
+     * hydrate the chat's content.
+     */
+    hasBeenOpened(chatId: string): boolean {
+        return this.payloads.has(chatId);
     }
 
     updateStatus(chatId: string, status: string): void {

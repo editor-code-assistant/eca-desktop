@@ -18,6 +18,7 @@ import {
     DOWNLOAD_RETRY_DELAY_MS,
     getDataDir,
 } from './constants';
+import { PreferencesStore } from './preferences-store';
 
 export enum EcaServerStatus {
     Stopped = 'Stopped',
@@ -98,7 +99,7 @@ export class EcaServer {
     onStatusChanged: (status: EcaServerStatus) => void = () => {};
     onLog: (msg: string) => void = (msg) => console.log('[ECA Server]', msg);
 
-    constructor() {}
+    constructor(private preferencesStore?: PreferencesStore) {}
 
     get connection(): rpc.MessageConnection | null {
         return this._connection;
@@ -127,9 +128,24 @@ export class EcaServer {
         return artifact;
     }
 
-    getServerBinaryPath(): string {
+    /** Path to the binary managed by auto-download (under ~/.eca-desktop/). */
+    getManagedBinaryPath(): string {
         const binaryName = os.platform() === 'win32' ? 'eca.exe' : 'eca';
         return path.join(getDataDir(), binaryName);
+    }
+
+    /** Custom server binary path from user preferences, if configured. */
+    getCustomBinaryPath(): string | undefined {
+        const custom = this.preferencesStore?.get().serverBinaryPath?.trim();
+        return custom && custom.length > 0 ? custom : undefined;
+    }
+
+    /**
+     * Effective binary path: returns the user's custom override (if set),
+     * otherwise the managed auto-download path.
+     */
+    getServerBinaryPath(): string {
+        return this.getCustomBinaryPath() ?? this.getManagedBinaryPath();
     }
 
     async getLatestVersion(): Promise<string> {
@@ -170,9 +186,10 @@ export class EcaServer {
         // Clean up the zip file
         fs.unlinkSync(zipPath);
 
-        // Set executable permissions on non-Windows
+        // Set executable permissions on non-Windows (managed binary only;
+        // a user-provided custom binary is expected to already be executable).
         if (os.platform() !== 'win32') {
-            const binaryPath = this.getServerBinaryPath();
+            const binaryPath = this.getManagedBinaryPath();
             fs.chmodSync(binaryPath, 0o775);
         }
 
@@ -181,7 +198,18 @@ export class EcaServer {
     }
 
     async ensureServer(): Promise<string> {
-        const binaryPath = this.getServerBinaryPath();
+        // When a custom server path is configured, skip auto-download and
+        // version checks entirely — just validate the file exists.
+        const customPath = this.getCustomBinaryPath();
+        if (customPath) {
+            if (!fs.existsSync(customPath)) {
+                throw new Error(`Custom ECA server binary not found at: ${customPath}`);
+            }
+            this.onLog(`Using custom ECA server binary: ${customPath}`);
+            return customPath;
+        }
+
+        const binaryPath = this.getManagedBinaryPath();
         const latestVersion = await this.getLatestVersion();
         const currentVersion = this.readVersionFile();
 

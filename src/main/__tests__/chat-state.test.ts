@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ChatOpenedParams, ChatContentReceivedParams, WorkspaceFolder } from '../protocol';
+import type { ChatOpenedParams, ChatContentReceivedParams, ChatSummary, WorkspaceFolder } from '../protocol';
 
 // Mock electron before importing ChatState
 vi.mock('electron', () => ({
@@ -199,6 +199,68 @@ describe('ChatState', () => {
             const list = s.getChatListUpdate();
             expect(list.entries[0].workspaceFolderName).toBe('my-project');
             expect(list.activeWorkspaceFolderName).toBe('my-project');
+        });
+    });
+
+    describe('addServerKnownEntries', () => {
+        const summary = (overrides: Partial<ChatSummary> = {}): ChatSummary => ({
+            id: 'cold-1',
+            title: 'Prior session',
+            status: 'idle',
+            messageCount: 2,
+            ...overrides,
+        });
+
+        it('populates the sidebar from a chat/list response', () => {
+            state.addServerKnownEntries([
+                summary({ id: 'a', title: 'First' }),
+                summary({ id: 'b', title: 'Second' }),
+            ]);
+            const ids = state.getChatListUpdate().entries.map(e => e.id);
+            expect(ids).toContain('a');
+            expect(ids).toContain('b');
+        });
+
+        it('does not overwrite richer state on existing entries', () => {
+            state.addOrUpdateEntry('a', { title: 'Live title', status: 'generating' });
+            state.addServerKnownEntries([summary({ id: 'a', title: 'Server title', status: 'idle' })]);
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'a');
+            expect(entry?.title).toBe('Live title');
+            expect(entry?.status).toBe('generating');
+        });
+
+        it('skips subagent chats', () => {
+            state.markAsSubagent('sub-1');
+            state.addServerKnownEntries([summary({ id: 'sub-1' })]);
+            const ids = state.getChatListUpdate().entries.map(e => e.id);
+            expect(ids).not.toContain('sub-1');
+        });
+
+        it('is a no-op for an empty input', () => {
+            state.addServerKnownEntries([]);
+            expect(state.getChatListUpdate().entries).toHaveLength(0);
+        });
+    });
+
+    describe('hasBeenOpened', () => {
+        it('returns false for an entry added only via chat/list', () => {
+            state.addServerKnownEntries([{
+                id: 'cold', status: 'idle', messageCount: 1, title: 'Cold',
+            } as ChatSummary]);
+            expect(state.hasBeenOpened('cold')).toBe(false);
+        });
+
+        it('returns true once a chat/opened payload has been cached', () => {
+            const payload: ChatOpenedParams = {
+                chatId: 'warm',
+                messages: [],
+                title: 'Warm',
+                status: 'idle',
+                models: [],
+                selectedModel: null,
+            } as ChatOpenedParams;
+            state.cachePayload('warm', payload);
+            expect(state.hasBeenOpened('warm')).toBe(true);
         });
     });
 });

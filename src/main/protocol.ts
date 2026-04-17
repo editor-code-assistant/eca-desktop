@@ -85,6 +85,38 @@ export interface ChatUpdateParams {
     [key: string]: unknown;
 }
 
+export interface ChatListParams {
+    /** Optional upper bound on the number of chats returned. */
+    limit?: number;
+    /** Sort key; server default is "updatedAt" when omitted. */
+    sortBy?: 'updatedAt' | 'createdAt';
+}
+
+export interface ChatSummary {
+    id: string;
+    title?: string;
+    status: string;
+    createdAt?: number;
+    updatedAt?: number;
+    model?: string;
+    messageCount: number;
+}
+
+export interface ChatListResponse {
+    chats: ChatSummary[];
+}
+
+export interface ChatOpenParams {
+    chatId: string;
+}
+
+export interface ChatOpenResponse {
+    /** True when the chat was replayed (chat/cleared + chat/opened + content). */
+    found: boolean;
+    chatId?: string;
+    title?: string;
+}
+
 export interface QueryContextParams {
     requestId?: string;
     [key: string]: unknown;

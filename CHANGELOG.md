@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sidebar now auto-populates with the workspace's prior chats on app launch,
+  using the new ECA `chat/list` protocol request. Clicking a previously-persisted
+  chat transparently hydrates it via `chat/open`, so reopening the app no longer
+  requires a manual `/resume`.
+
 ## [0.3.0] - 2026-04-16
 
 ### Added

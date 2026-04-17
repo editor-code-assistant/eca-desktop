@@ -1,11 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'path';
+import * as fs from 'fs';
 import { pathToFileURL } from 'url';
 import { createBridge } from './bridge';
 import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
 import { SessionManager } from './session-manager';
 import { SessionStore } from './session-store';
+import { PreferencesStore, Preferences } from './preferences-store';
+import { getPreferencesWindow } from './preferences-window';
 import { WorkspaceFolder } from './protocol';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -56,11 +59,62 @@ async function main(): Promise<void> {
 
   const mainWindow = createWindow();
 
+  const preferencesStore = new PreferencesStore();
+
   createMenu(mainWindow);
 
-  const sessionManager = new SessionManager();
+  const sessionManager = new SessionManager(preferencesStore);
   const sessionStore = new SessionStore();
   const bridge = createBridge(mainWindow, sessionManager, sessionStore);
+
+  // ── Preferences IPC (request/response) ──
+  ipcMain.handle('preferences:get', (): Preferences => preferencesStore.get());
+
+  ipcMain.handle('preferences:set', (_event, patch: Partial<Preferences>) => {
+    // Validate server binary path before persisting.
+    if (patch && typeof patch.serverBinaryPath === 'string' && patch.serverBinaryPath.trim() !== '') {
+      const candidate = patch.serverBinaryPath.trim();
+      if (!fs.existsSync(candidate)) {
+        return { ok: false, error: `File does not exist: ${candidate}` };
+      }
+      try {
+        const stat = fs.statSync(candidate);
+        if (!stat.isFile()) {
+          return { ok: false, error: `Not a regular file: ${candidate}` };
+        }
+      } catch (err: any) {
+        return { ok: false, error: err?.message ?? 'Could not stat file' };
+      }
+      if (process.platform !== 'win32') {
+        try {
+          fs.accessSync(candidate, fs.constants.X_OK);
+        } catch {
+          return { ok: false, error: `File is not executable: ${candidate}` };
+        }
+      }
+    }
+
+    const preferences = preferencesStore.set(patch);
+
+    // Broadcast to every open window so any watcher can refresh.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('preferences-updated', preferences);
+      }
+    }
+
+    return { ok: true, preferences };
+  });
+
+  ipcMain.handle('preferences:pick-binary', async () => {
+    const parent = getPreferencesWindow() ?? mainWindow;
+    const result = await dialog.showOpenDialog(parent, {
+      properties: ['openFile'],
+      title: 'Select ECA server binary',
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('welcome-data', {
@@ -131,6 +185,10 @@ async function main(): Promise<void> {
     }
 
     try {
+      // `start()` only resolves after the server has processed `initialize`
+      // AND the client has sent `initialized` — which is exactly when the
+      // server has rehydrated its persisted chats from disk and is safe to
+      // answer `chat/list`.
       await session.ecaServer.start([workspaceFolder]);
       bridge.registerServerNotifications(session);
 
@@ -146,6 +204,12 @@ async function main(): Promise<void> {
           data: [session.workspaceFolder],
         });
       }
+
+      // Fetch the persisted chat list so the sidebar reflects prior work in
+      // this workspace. Must happen after notifications are registered so any
+      // follow-up server events (e.g. from a user clicking one of the loaded
+      // entries) are delivered through the existing handlers.
+      await bridge.loadSessionChats(session);
     } catch (err) {
       console.error('[Main] Failed to start ECA server for session:', err);
     }
