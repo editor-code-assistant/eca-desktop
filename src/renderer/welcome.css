@@ -16,8 +16,8 @@ body.welcome-active .sidebar {
     display: none;
 }
 
-body.welcome-active .desktop-titlebar {
-    left: 0;
+body.welcome-active .sidebar-collapse-btn {
+    display: none;
 }
 
 body.welcome-active .app-content {

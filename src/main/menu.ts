@@ -139,6 +139,15 @@ export function createMenu(mainWindow: BrowserWindow) {
         {
             label: 'View',
             submenu: [
+                {
+                    label: 'Toggle Sidebar',
+                    accelerator: 'CmdOrCtrl+B',
+                    click: () => {
+                        const toggle = (global as any).__ecaToggleSidebarCollapse;
+                        if (typeof toggle === 'function') toggle();
+                    },
+                },
+                { type: 'separator' },
                 { role: 'reload' },
                 { role: 'forceReload' },
                 { role: 'toggleDevTools' },
