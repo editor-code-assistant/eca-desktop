@@ -313,6 +313,67 @@ describe('ChatState', () => {
         });
     });
 
+    describe('pending tool-call approvals', () => {
+        it('overlays status as "waiting-approval" when a tool call is pending', () => {
+            state.addOrUpdateEntry('c1', { title: 'x', status: 'generating' });
+            state.markToolCallWaitingApproval('c1', 'tool-1');
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'c1');
+            expect(entry?.status).toBe('waiting-approval');
+        });
+
+        it('does not mutate the stored entry — override is read-only', () => {
+            state.addOrUpdateEntry('c1', { title: 'x', status: 'generating' });
+            state.markToolCallWaitingApproval('c1', 'tool-1');
+            // Read once (overlay applies)
+            state.getChatListUpdate();
+            // Clearing the overlay should restore the underlying status
+            state.markToolCallNotWaitingApproval('c1', 'tool-1');
+            const entry = state.getChatListUpdate().entries.find(e => e.id === 'c1');
+            expect(entry?.status).toBe('generating');
+        });
+
+        it('clears the overlay once every pending tool call has resolved', () => {
+            state.addOrUpdateEntry('c1', { title: 'x', status: 'generating' });
+            state.markToolCallWaitingApproval('c1', 'tool-1');
+            state.markToolCallWaitingApproval('c1', 'tool-2');
+
+            // Only one resolved → still waiting
+            state.markToolCallNotWaitingApproval('c1', 'tool-1');
+            expect(state.hasPendingApproval('c1')).toBe(true);
+            expect(state.getChatListUpdate().entries[0].status).toBe('waiting-approval');
+
+            // Last one resolved → overlay lifts
+            state.markToolCallNotWaitingApproval('c1', 'tool-2');
+            expect(state.hasPendingApproval('c1')).toBe(false);
+            expect(state.getChatListUpdate().entries[0].status).toBe('generating');
+        });
+
+        it('markToolCallNotWaitingApproval on an unknown chat/tool is a no-op', () => {
+            expect(() => state.markToolCallNotWaitingApproval('nope', 'nope')).not.toThrow();
+            expect(state.hasPendingApproval('nope')).toBe(false);
+        });
+
+        it('removeEntry clears pending approvals for that chat', () => {
+            state.addOrUpdateEntry('c1', { title: 'x' });
+            state.markToolCallWaitingApproval('c1', 'tool-1');
+            state.removeEntry('c1');
+            expect(state.hasPendingApproval('c1')).toBe(false);
+        });
+
+        it('markAsSubagent drops any previously-tracked approvals', () => {
+            state.addOrUpdateEntry('c1', { title: 'x' });
+            state.markToolCallWaitingApproval('c1', 'tool-1');
+            state.markAsSubagent('c1');
+            expect(state.hasPendingApproval('c1')).toBe(false);
+        });
+
+        it('markToolCallWaitingApproval is a no-op for subagent chats', () => {
+            state.markAsSubagent('sub-1');
+            state.markToolCallWaitingApproval('sub-1', 'tool-1');
+            expect(state.hasPendingApproval('sub-1')).toBe(false);
+        });
+    });
+
     describe('subagent guard', () => {
         it('addOrUpdateEntry becomes a no-op once a chat is marked as a subagent', () => {
             state.markAsSubagent('sub-1');

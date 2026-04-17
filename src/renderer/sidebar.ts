@@ -198,10 +198,25 @@ declare global {
         const item = document.createElement('div');
         item.className = 'sidebar-chat-item';
         if (entry.id === selectedId) item.classList.add('active');
-        const isActive = entry.status === 'generating' || entry.status === 'busy';
-        if (isActive) item.classList.add('generating');
+        // Mutually exclusive visual states (only one color wins):
+        //   - waiting-approval (orange) beats generating because an approval
+        //     request is the more actionable, attention-grabbing state.
+        //   - generating/running/busy (soft gold) is the default in-flight
+        //     indicator. The set of accepted strings reflects all sources:
+        //     'generating' is set optimistically by the router when a brand-
+        //     new chat is created, while 'running' is what the ECA server
+        //     emits via chat/statusChanged for every in-flight prompt
+        //     (including follow-ups). 'busy' is kept for legacy/back-compat.
+        const isWaitingApproval = entry.status === 'waiting-approval';
+        const isActive = !isWaitingApproval && (
+            entry.status === 'generating' ||
+            entry.status === 'running' ||
+            entry.status === 'busy'
+        );
+        if (isWaitingApproval) item.classList.add('waiting-approval');
+        else if (isActive) item.classList.add('generating');
 
-        // Status dot — visible when generating
+        // Status dot — visible when generating or waiting for approval
         const dot = document.createElement('span');
         dot.className = 'sidebar-chat-dot';
 

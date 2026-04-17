@@ -138,13 +138,33 @@ export function createBridge(
             // Update sidebar title when metadata arrives. addOrUpdateEntry is
             // a no-op for subagents, so we don't need an explicit guard here.
             const content = (params as Record<string, unknown>).content as
-                | { type?: string; title?: string }
+                | { type?: string; title?: string; id?: string; manualApproval?: boolean }
                 | undefined;
             if (content?.type === 'metadata' && content.title) {
                 session.chatState.addOrUpdateEntry(params.chatId, {
                     title: content.title,
                 });
                 sendChatListUpdate();
+            }
+
+            // Track tool-call manual-approval transitions so the sidebar can
+            // flip the chat into the orange 'waiting-approval' state.
+            //   - `toolCallRun` + manualApproval=true  → blocked on the user
+            //   - `toolCallRunning` / `toolCallRejected` / `toolCalled` → unblock
+            // Non-manual-approval runs never enter the pending set, so their
+            // terminal events are harmless no-ops.
+            if (content?.id) {
+                if (content.type === 'toolCallRun' && content.manualApproval) {
+                    session.chatState.markToolCallWaitingApproval(params.chatId, content.id);
+                    sendChatListUpdate();
+                } else if (
+                    content.type === 'toolCallRunning' ||
+                    content.type === 'toolCallRejected' ||
+                    content.type === 'toolCalled'
+                ) {
+                    session.chatState.markToolCallNotWaitingApproval(params.chatId, content.id);
+                    sendChatListUpdate();
+                }
             }
 
             sendToRenderer('chat/contentReceived', params);

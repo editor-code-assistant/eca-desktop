@@ -192,8 +192,17 @@
     background: transparent;
     transition: background 0.2s ease;
 }
+/* Generating — softer, theme-aware gold (tracks --eca-warning-fg so it
+   reads well on both light and dark). The previous hard #eab308 was
+   too saturated against the sidebar surface. */
 .sidebar-chat-item.generating .sidebar-chat-dot {
-    background: #eab308;
+    background: var(--eca-warning-fg);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+/* Waiting approval — orange, using the shared approval token. Same
+   pulse rhythm as generating so the sidebar feels coherent. */
+.sidebar-chat-item.waiting-approval .sidebar-chat-dot {
+    background: var(--eca-approval-fg);
     animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -216,9 +225,21 @@
     opacity: 1;
 }
 
-/* Generating indicator — yellow title while running */
+/* Generating indicator — light yellow tint while running. We mix the
+   theme-aware --eca-warning-fg with the editor foreground so the title
+   reads as a soft, lightly-tinted yellow rather than the saturated gold
+   of the raw token. Keeps automatic light/dark adaptation. */
 .sidebar-chat-item.generating .sidebar-chat-title {
-    color: #eab308;
+    color: color-mix(in srgb, var(--eca-warning-fg) 45%, var(--eca-editor-fg));
+    opacity: 0.9;
+}
+
+/* Waiting-approval indicator — orange title, signaling that the
+   chat is blocked on a manual tool-call approval. Uses the shared
+   --eca-approval-fg so the hue matches the prompt-area border
+   (theme.css .prompt-area.waiting-approval). */
+.sidebar-chat-item.waiting-approval .sidebar-chat-title {
+    color: var(--eca-approval-fg);
     opacity: 1;
 }
 

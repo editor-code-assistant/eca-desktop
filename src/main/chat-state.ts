@@ -17,6 +17,14 @@ export class ChatState {
     private payloads = new Map<string, ChatOpenedParams>();
     private contentEvents = new Map<string, ChatContentReceivedParams[]>();
     private subagentChatIds = new Set<string>();
+    /**
+     * Tool calls awaiting manual user approval, keyed by chatId.
+     * Populated from `toolCallRun` content events (with manualApproval=true)
+     * and cleared when the tool transitions to running / rejected / called.
+     * Drives the sidebar's orange "waiting-approval" badge (see
+     * `getChatListUpdate` override + sidebar.css .waiting-approval).
+     */
+    private pendingApprovals = new Map<string, Set<string>>();
     private _selectedChatId: string | null = null;
     private workspaceFolderName: string;
 
@@ -47,6 +55,9 @@ export class ChatState {
         if (this.entries.has(chatId)) {
             this.entries.delete(chatId);
         }
+        // Subagent chats never surface in the sidebar — drop any pending
+        // approvals we may have tracked so the map doesn't leak.
+        this.pendingApprovals.delete(chatId);
         if (this._selectedChatId === chatId) {
             this._selectedChatId = null;
         }
@@ -145,9 +156,48 @@ export class ChatState {
         this.entries.delete(chatId);
         this.payloads.delete(chatId);
         this.contentEvents.delete(chatId);
+        this.pendingApprovals.delete(chatId);
         if (this._selectedChatId === chatId) {
             this._selectedChatId = null;
         }
+    }
+
+    // ── Pending tool-call approvals (sidebar "waiting-approval" signal) ──
+
+    /**
+     * Record that a specific tool call in this chat is blocked on the user
+     * granting manual approval. The sidebar overlay this as a 'waiting-
+     * approval' status (orange) in `getChatListUpdate`.
+     */
+    markToolCallWaitingApproval(chatId: string, toolCallId: string): void {
+        if (this.subagentChatIds.has(chatId)) return;
+        let ids = this.pendingApprovals.get(chatId);
+        if (!ids) {
+            ids = new Set<string>();
+            this.pendingApprovals.set(chatId, ids);
+        }
+        ids.add(toolCallId);
+    }
+
+    /**
+     * Clear a previously-recorded pending approval for this tool call.
+     * Called when the tool transitions to running / rejected / called.
+     * Deletes the chat's entry from the map once its set empties so
+     * `hasPendingApproval` returns false without further checks.
+     */
+    markToolCallNotWaitingApproval(chatId: string, toolCallId: string): void {
+        const ids = this.pendingApprovals.get(chatId);
+        if (!ids) return;
+        ids.delete(toolCallId);
+        if (ids.size === 0) {
+            this.pendingApprovals.delete(chatId);
+        }
+    }
+
+    /** True when the given chat has at least one tool call awaiting approval. */
+    hasPendingApproval(chatId: string): boolean {
+        const ids = this.pendingApprovals.get(chatId);
+        return !!ids && ids.size > 0;
     }
 
     // ── Pending "New Chat" placeholder ──
@@ -200,8 +250,21 @@ export class ChatState {
     // ── Sidebar list data ──
 
     getChatListUpdate() {
+        // Overlay the 'waiting-approval' status on entries that have at
+        // least one tool call blocked on manual approval. This is computed
+        // on read (rather than stored on the entry) so the source of truth
+        // stays the pendingApprovals map — the moment the last tool call
+        // clears, the sidebar reverts to whatever server status was last
+        // broadcast (e.g. 'generating' while the model keeps working).
+        const entries = Array.from(this.entries.values())
+            .reverse()
+            .map(entry =>
+                this.hasPendingApproval(entry.id)
+                    ? { ...entry, status: 'waiting-approval' }
+                    : entry,
+            );
         return {
-            entries: Array.from(this.entries.values()).reverse(),
+            entries,
             selectedId: this._selectedChatId,
             activeWorkspaceFolderName: this.workspaceFolderName,
         };
