@@ -171,11 +171,45 @@ const routes: Record<string, RouteHandler> = {
     'mcp/updateServer': async (ctx, data) => {
         const result = await ctx.conn.sendRequest(rpcTypes.mcpUpdateServer, {
             name: data.name,
-            ...(data.command && { command: data.command }),
-            ...(data.args && { args: data.args }),
-            ...(data.url && { url: data.url }),
+            ...(data.command !== undefined && { command: data.command }),
+            ...(data.args !== undefined && { args: data.args }),
+            ...(data.url !== undefined && { url: data.url }),
+            ...(data.env !== undefined && { env: data.env }),
+            ...(data.headers !== undefined && { headers: data.headers }),
         });
         ctx.sendToRenderer('mcp/updateServer', { requestId: data.requestId, ...result });
+    },
+
+    'mcp/addServer': async (ctx, data) => {
+        const params: Record<string, unknown> = { name: data.name };
+        // Forward only fields the caller provided; the server accepts a
+        // stdio/HTTP union and enforces exclusivity.
+        for (const k of ['command', 'args', 'env', 'url', 'headers',
+                          'clientId', 'clientSecret', 'oauthPort',
+                          'disabled', 'scope', 'workspaceUri'] as const) {
+            if (data[k] !== undefined) params[k] = data[k];
+        }
+        try {
+            const result = await ctx.conn.sendRequest(rpcTypes.mcpAddServer, params as any);
+            ctx.sendToRenderer('mcp/addServer', { requestId: data.requestId, ...result });
+        } catch (err) {
+            ctx.sendToRenderer('mcp/addServer', {
+                requestId: data.requestId,
+                error: { code: 'rpc_error', message: (err as Error).message ?? 'Unknown error' },
+            });
+        }
+    },
+
+    'mcp/removeServer': async (ctx, data) => {
+        try {
+            const result = await ctx.conn.sendRequest(rpcTypes.mcpRemoveServer, { name: data.name });
+            ctx.sendToRenderer('mcp/removeServer', { requestId: data.requestId, ...result });
+        } catch (err) {
+            ctx.sendToRenderer('mcp/removeServer', {
+                requestId: data.requestId,
+                error: { code: 'rpc_error', message: (err as Error).message ?? 'Unknown error' },
+            });
+        }
     },
 
     // ── Providers ──

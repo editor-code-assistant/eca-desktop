@@ -242,7 +242,9 @@ export interface McpUpdateServerParams {
     name: string;
     command?: string;
     args?: string[];
+    env?: Record<string, string>;
     url?: string;
+    headers?: Record<string, string>;
     requestId?: string;
 }
 
@@ -251,11 +253,61 @@ export interface McpUpdateServerResult {
     [key: string]: unknown;
 }
 
+/**
+ * Payload for `mcp/addServer` (JSON-RPC request).
+ *
+ * Exactly one of stdio (`command` + optional `args`/`env`) or HTTP
+ * (`url` + optional `headers`) must be supplied. `scope` defaults to
+ * "global" on the server; "workspace" requires `workspaceUri`.
+ */
+export interface McpAddServerParams {
+    name: string;
+    // stdio transport
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    // HTTP transport
+    url?: string;
+    headers?: Record<string, string>;
+    clientId?: string;
+    clientSecret?: string;
+    oauthPort?: number;
+    // shared
+    disabled?: boolean;
+    scope?: 'global' | 'workspace';
+    workspaceUri?: string;
+    requestId?: string;
+}
+
+export interface McpAddServerResult {
+    requestId?: string;
+    server?: ToolServerUpdatedParams;
+    error?: { code: string; message: string; data?: unknown };
+    [key: string]: unknown;
+}
+
+export interface McpRemoveServerParams {
+    name: string;
+    requestId?: string;
+}
+
+export interface McpRemoveServerResult {
+    requestId?: string;
+    name?: string;
+    removed?: boolean;
+    error?: { code: string; message: string; data?: unknown };
+    [key: string]: unknown;
+}
+
 // ── Tool Servers ──
 
 export interface ToolServerUpdatedParams {
     name: string;
     [key: string]: unknown;
+}
+
+export interface ToolServerRemovedParams {
+    name: string;
 }
 
 // ── Config ──
@@ -406,6 +458,8 @@ export type IpcMessageType =
     | 'mcp/disableServer'
     | 'mcp/enableServer'
     | 'mcp/updateServer'
+    | 'mcp/addServer'
+    | 'mcp/removeServer'
     | 'providers/list'
     | 'providers/login'
     | 'providers/loginInput'

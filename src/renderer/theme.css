@@ -446,8 +446,7 @@ html[data-editor="web"][data-theme="light"] {
      Capping the container at the same 52em used for chat keeps every
      descendant (server-card, provider-card, job-card, settings-tabs,
      etc.) proportional without needing per-card selectors. */
-  [data-editor="web"] .settings-container,
-  [data-editor="web"] .mcp-details-container {
+  [data-editor="web"] .settings-container {
     max-width: 52em;
     margin-left: auto;
     margin-right: auto;

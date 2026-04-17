@@ -249,6 +249,22 @@ export function createBridge(
             }
         });
 
+        conn.onNotification(rpc.toolServerRemoved, (params) => {
+            // Drop the entry from the session-scoped cache so later
+            // rehydrations don't resurrect a server the user removed.
+            // `Reflect.deleteProperty` satisfies
+            // @typescript-eslint/no-dynamic-delete; the cache object
+            // is captured by closure in other handlers so we can't
+            // simply rebind it.
+            Reflect.deleteProperty(sessionMcpServers, params.name);
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('tool/serverRemoved', params);
+                // Also re-broadcast the current list so any stale
+                // consumers that ignore 'tool/serverRemoved' converge.
+                sendToRenderer('tool/serversUpdated', Object.values(sessionMcpServers));
+            }
+        });
+
         conn.onNotification(rpc.configUpdated, (params) => {
             configCache.set(session.id, params);
             if (session.id === sessionManager.activeSessionId) {

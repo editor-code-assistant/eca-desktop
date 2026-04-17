@@ -24,7 +24,10 @@ import {
     AskQuestionParams, AskQuestionResult,
     McpServerNameParams,
     McpUpdateServerParams, McpUpdateServerResult,
+    McpAddServerParams, McpAddServerResult,
+    McpRemoveServerParams, McpRemoveServerResult,
     ToolServerUpdatedParams,
+    ToolServerRemovedParams,
     ConfigUpdatedParams,
     ProvidersRequestParams, ProvidersResult,
     JobsListParams, JobsResult,
@@ -85,10 +88,13 @@ export const mcpLogoutServer = new rpc.NotificationType<McpServerNameParams>('mc
 export const mcpDisableServer = new rpc.NotificationType<McpServerNameParams>('mcp/disableServer');
 export const mcpEnableServer = new rpc.NotificationType<McpServerNameParams>('mcp/enableServer');
 export const mcpUpdateServer = new rpc.RequestType<McpUpdateServerParams, McpUpdateServerResult, void>('mcp/updateServer');
+export const mcpAddServer = new rpc.RequestType<McpAddServerParams, McpAddServerResult, void>('mcp/addServer');
+export const mcpRemoveServer = new rpc.RequestType<McpRemoveServerParams, McpRemoveServerResult, void>('mcp/removeServer');
 
 // ── Tool Servers ──
 
 export const toolServerUpdated = new rpc.NotificationType<ToolServerUpdatedParams>('tool/serverUpdated');
+export const toolServerRemoved = new rpc.NotificationType<ToolServerRemovedParams>('tool/serverRemoved');
 
 // ── Config ──
 
