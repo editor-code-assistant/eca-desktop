@@ -3,6 +3,7 @@ import path from 'path';
 import * as fs from 'fs';
 import { pathToFileURL } from 'url';
 import { createBridge } from './bridge';
+import { getLogStore } from './log-store';
 import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
 import { SessionManager } from './session-manager';
@@ -71,6 +72,24 @@ async function main(): Promise<void> {
   const mainWindow = createWindow();
 
   const preferencesStore = new PreferencesStore();
+
+  // Initialize the log store BEFORE the session manager so the earliest
+  // server-lifecycle messages (download, version check, start errors)
+  // are captured. The store is safe to access after app.whenReady().
+  const logStore = getLogStore();
+
+  // Stream every new log entry to the webview as a `server-message` so
+  // the Logs tab can render them live. `server-message` is already the
+  // existing fan-out channel consumed by eca-webview via `useWebviewListener`
+  // (see eca-webview/src/pages/RootWrapper.tsx).
+  logStore.subscribe((entry) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('server-message', {
+        type: 'logs/appended',
+        data: entry,
+      });
+    }
+  });
 
   createMenu(mainWindow);
 

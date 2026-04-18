@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { EcaServer } from './server';
 import { ChatState } from './chat-state';
+import { getLogStore } from './log-store';
 import type { PreferencesStore } from './preferences-store';
 import type { WorkspaceFolder, ChatEntry, SessionInfo, SessionListUpdate } from './protocol';
 
@@ -40,6 +41,15 @@ export class SessionManager extends EventEmitter {
     createSession(workspaceFolder: WorkspaceFolder): Session {
         const id = crypto.randomUUID();
         const ecaServer = new EcaServer(this.preferencesStore);
+
+        // Route every `onLog` line (stderr chunks + lifecycle messages
+        // emitted by EcaServer itself) into the central LogStore so the
+        // Logs UI and the on-disk `eca-server.log` both receive them.
+        const logStore = getLogStore();
+        ecaServer.onLog = (msg: string) => {
+            logStore.append({ sessionId: id, source: 'server', text: msg });
+        };
+
         const chatState = new ChatState([workspaceFolder]);
 
         const session: Session = { id, workspaceFolder, ecaServer, chatState };

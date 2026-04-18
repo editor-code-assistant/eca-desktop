@@ -3,10 +3,11 @@
 // ============================================================
 
 import type { BrowserWindow} from 'electron';
-import { ipcMain } from 'electron';
+import { ipcMain, shell } from 'electron';
 import { EcaServerStatus } from './server';
 import type { ChatState} from './chat-state';
 import { PENDING_CHAT_ID } from './chat-state';
+import { getLogStore } from './log-store';
 import type { RouteContext } from './router';
 import { dispatch } from './router';
 import type { IpcMessage, ToolServerUpdatedParams, ChatEntry, AskQuestionResult } from './protocol';
@@ -304,6 +305,31 @@ export function createBridge(
     // ── Renderer → Server (IPC dispatch) ──
 
     ipcMain.on('webview-message', async (_event, message: IpcMessage) => {
+        // ── Logs (handled locally, no server connection required) ──
+        //
+        // These live before the session/conn check so the Logs tab stays
+        // useful even when no session has been created yet — which is
+        // precisely the moment users hit download / binary-not-found
+        // failures they most want to inspect.
+        if (message.type === 'logs/snapshot') {
+            sendToRenderer('logs/snapshot', getLogStore().snapshot());
+            return;
+        }
+        if (message.type === 'logs/clear') {
+            getLogStore().clear();
+            return;
+        }
+        if (message.type === 'logs/openFolder') {
+            const file = getLogStore().logFilePath();
+            if (file) {
+                // `showItemInFolder` opens the OS file manager with the
+                // log file pre-selected, which is friendlier than just
+                // revealing the directory.
+                shell.showItemInFolder(file);
+            }
+            return;
+        }
+
         const session = getActiveSession();
         const conn = session?.ecaServer.connection ?? null;
 

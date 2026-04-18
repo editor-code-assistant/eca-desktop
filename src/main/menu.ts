@@ -2,6 +2,7 @@ import { app, Menu, shell } from 'electron';
 import type { BrowserWindow } from 'electron';
 import { DOCS_URL, ISSUES_URL } from './constants';
 import * as editorActions from './editor-actions';
+import { getLogStore } from './log-store';
 import { openPreferencesWindow } from './preferences-window';
 
 export function createMenu(mainWindow: BrowserWindow) {
@@ -155,6 +156,16 @@ export function createMenu(mainWindow: BrowserWindow) {
                     click: () => sendWebview('navigateTo', { path: '/settings' }),
                 },
                 {
+                    label: 'View Logs',
+                    // Re-uses the existing `navigateTo` listener in
+                    // RootWrapper; Settings reads `location.state.tab`
+                    // to pick the initial tab.
+                    click: () => sendWebview('navigateTo', {
+                        path: '/settings',
+                        state: { tab: 'logs' },
+                    }),
+                },
+                {
                     label: 'Open Global Config…',
                     click: () => editorActions.openGlobalConfig(),
                 },
@@ -217,6 +228,16 @@ export function createMenu(mainWindow: BrowserWindow) {
                     label: 'Report Issue',
                     click: () => {
                         shell.openExternal(ISSUES_URL);
+                    },
+                },
+                { type: 'separator' },
+                {
+                    label: 'Open Logs Folder',
+                    // Reveals `eca-server.log` in the OS file manager
+                    // so the file can be attached to bug reports.
+                    click: () => {
+                        const file = getLogStore().logFilePath();
+                        if (file) shell.showItemInFolder(file);
                     },
                 },
             ],
