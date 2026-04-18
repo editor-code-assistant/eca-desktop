@@ -328,6 +328,22 @@ export interface ProvidersResult {
     [key: string]: unknown;
 }
 
+// ── $/progress (server → client) ──
+//
+// Notification emitted by the ECA server while background initialization
+// tasks run (e.g. loading models, warming indexers). Mirrors what
+// eca-emacs consumes via (eca--handle-progress): the client keeps a map
+// of taskId → { title, type } and can derive a "N/M · title" progress
+// line to show while any task is still in the 'start' state.
+//
+// `type` transitions monotonically from 'start' to 'finish' for a given
+// taskId; the title for a taskId is stable across both events.
+export interface ProgressParams {
+    taskId: string;
+    title: string;
+    type: 'start' | 'finish';
+}
+
 // ── Background Jobs ──
 
 export interface JobsListParams {

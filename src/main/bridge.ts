@@ -283,6 +283,18 @@ export function createBridge(
             sendToRenderer('jobs/updated', params);
         });
 
+        // $/progress — server-emitted init-progress notifications. Forwarded
+        // only for the active session so the webview's single shared store
+        // isn't polluted by background sessions. See ProgressParams in
+        // src/main/protocol.ts for the payload shape and the corresponding
+        // eca-emacs handler (eca--handle-progress) for the expected
+        // "N/M · title" rendering contract.
+        conn.onNotification(rpc.progress, (params) => {
+            if (session.id === sessionManager.activeSessionId) {
+                sendToRenderer('$/progress', params);
+            }
+        });
+
         // ── chat/askQuestion (server → client request) ──
 
         conn.onRequest(rpc.chatAskQuestion, async (params) => {

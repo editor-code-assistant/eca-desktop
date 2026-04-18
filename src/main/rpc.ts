@@ -34,6 +34,7 @@ import {
     JobsReadOutputParams,
     JobsKillParams,
     InitializeParams, InitializeResult,
+    ProgressParams,
 } from './protocol';
 
 // ── Lifecycle ──
@@ -107,6 +108,13 @@ export const providersLogin = new rpc.RequestType<ProvidersRequestParams, Provid
 export const providersLoginInput = new rpc.RequestType<ProvidersRequestParams, ProvidersResult, void>('providers/loginInput');
 export const providersLogout = new rpc.RequestType<ProvidersRequestParams, ProvidersResult, void>('providers/logout');
 export const providersUpdated = new rpc.NotificationType<ProvidersResult>('providers/updated');
+
+// ── Progress ──
+//
+// ECA server → client init-progress notification. Custom ECA protocol
+// (not LSP WorkDoneProgress) — params carry `{taskId, title, type}`.
+// See src/main/protocol.ts::ProgressParams.
+export const progress = new rpc.NotificationType<ProgressParams>('$/progress');
 
 // ── Background Jobs ──
 
