@@ -6,6 +6,7 @@ dist/
 release/
 src/renderer/sidebar.js
 src/renderer/welcome.js
+src/renderer/preferences.js
 
 # OS files
 .DS_Store
