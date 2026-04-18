@@ -1,4 +1,5 @@
-import { ChildProcess, spawn } from 'child_process';
+import type { ChildProcess} from 'child_process';
+import { spawn } from 'child_process';
 import extractZip from 'extract-zip';
 import { https } from 'follow-redirects';
 import * as fs from 'fs';
@@ -18,7 +19,7 @@ import {
     DOWNLOAD_RETRY_DELAY_MS,
     getDataDir,
 } from './constants';
-import { PreferencesStore } from './preferences-store';
+import type { PreferencesStore } from './preferences-store';
 
 export enum EcaServerStatus {
     Stopped = 'Stopped',
@@ -27,14 +28,14 @@ export enum EcaServerStatus {
     Failed = 'Failed',
 }
 
-function fetchJson(url: string): Promise<any> {
+function fetchJson(url: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
 
         const req = https.get(url, {
             headers: { 'User-Agent': USER_AGENT },
-            signal: controller.signal as any,
+            signal: controller.signal,
         }, (res) => {
             let data = '';
             res.on('data', (chunk: string) => { data += chunk; });
@@ -59,7 +60,7 @@ function downloadFileOnce(url: string, destPath: string): Promise<void> {
         const file = fs.createWriteStream(destPath);
         const req = https.get(url, {
             headers: { 'User-Agent': USER_AGENT },
-            signal: controller.signal as any,
+            signal: controller.signal,
         }, (res) => {
             res.pipe(file);
             file.on('finish', () => {
@@ -281,8 +282,9 @@ export class EcaServer {
             this.onLog(`ECA server initialized: ${JSON.stringify(initResult)}`);
             this._connection.sendNotification('initialized', {});
             this.setStatus(EcaServerStatus.Running);
-        } catch (err: any) {
-            this.onLog(`Failed to start ECA server: ${err.message}`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.onLog(`Failed to start ECA server: ${message}`);
             this.setStatus(EcaServerStatus.Failed);
             throw err;
         }

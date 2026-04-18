@@ -2,15 +2,16 @@
 // Bridge — thin orchestrator wiring IPC, router, and chat state
 // ============================================================
 
-import { BrowserWindow, ipcMain } from 'electron';
+import type { BrowserWindow} from 'electron';
+import { ipcMain } from 'electron';
 import { EcaServerStatus } from './server';
-import { ChatState, PENDING_CHAT_ID } from './chat-state';
-import { dispatch, RouteContext } from './router';
-import { IpcMessage, ToolServerUpdatedParams, WorkspaceFolder, ChatEntry, AskQuestionResult } from './protocol';
-import * as jsonrpc from 'vscode-jsonrpc/node';
+import type { ChatState} from './chat-state';
+import { PENDING_CHAT_ID } from './chat-state';
+import type { RouteContext } from './router';
+import { dispatch } from './router';
+import type { IpcMessage, ToolServerUpdatedParams, ChatEntry, AskQuestionResult } from './protocol';
 import * as rpc from './rpc';
-import { SessionManager, Session } from './session-manager';
-import { SessionStore } from './session-store';
+import type { SessionManager, Session } from './session-manager';
 
 // Track MCP server, config and providers state per session
 const mcpServers = new Map<string, Record<string, ToolServerUpdatedParams>>();
@@ -20,7 +21,6 @@ const providersCache = new Map<string, unknown>();
 export function createBridge(
     mainWindow: BrowserWindow,
     sessionManager: SessionManager,
-    sessionStore: SessionStore,
 ) {
     // ── Pending askQuestion requests ──
 
@@ -37,11 +37,6 @@ export function createBridge(
 
     function getActiveChatState(): ChatState | undefined {
         return getActiveSession()?.chatState;
-    }
-
-    function getActiveConnection(): jsonrpc.MessageConnection | undefined {
-        const session = getActiveSession();
-        return session?.ecaServer.connection ?? undefined;
     }
 
     // ── Helper: send to renderer ──

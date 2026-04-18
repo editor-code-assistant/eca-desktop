@@ -2,8 +2,8 @@
 // Chat state management — sidebar entries + rehydration cache
 // ============================================================
 
-import { BrowserWindow } from 'electron';
-import { ChatEntry, ChatOpenedParams, ChatContentReceivedParams, ChatSummary, WorkspaceFolder } from './protocol';
+import * as path from 'path';
+import type { ChatEntry, ChatOpenedParams, ChatContentReceivedParams, ChatSummary, WorkspaceFolder } from './protocol';
 
 /** Sentinel ID for the placeholder "New Chat" sidebar entry before a prompt is sent. */
 export const PENDING_CHAT_ID = '__pending_new_chat__';
@@ -29,7 +29,6 @@ export class ChatState {
     private workspaceFolderName: string;
 
     constructor(workspaceFolders: WorkspaceFolder[]) {
-        const path = require('path') as typeof import('path');
         this.workspaceFolderName = workspaceFolders[0]?.name || path.basename(process.cwd());
     }
 

@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog } from 'electron';
+import type { BrowserWindow} from 'electron';
+import { dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 export function setupAutoUpdater(mainWindow: BrowserWindow) {

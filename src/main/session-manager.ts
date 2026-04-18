@@ -4,10 +4,10 @@
 
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
-import { EcaServer, EcaServerStatus } from './server';
+import { EcaServer } from './server';
 import { ChatState } from './chat-state';
-import { PreferencesStore } from './preferences-store';
-import { WorkspaceFolder, ChatEntry, SessionInfo, SessionListUpdate, RecentWorkspace } from './protocol';
+import type { PreferencesStore } from './preferences-store';
+import type { WorkspaceFolder, ChatEntry, SessionInfo, SessionListUpdate } from './protocol';
 
 export interface Session {
     id: string;

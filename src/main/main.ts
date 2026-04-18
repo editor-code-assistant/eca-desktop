@@ -7,9 +7,10 @@ import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
 import { SessionManager } from './session-manager';
 import { SessionStore } from './session-store';
-import { PreferencesStore, Preferences, isValidTheme } from './preferences-store';
+import type { Preferences} from './preferences-store';
+import { PreferencesStore, isValidTheme } from './preferences-store';
 import { getPreferencesWindow } from './preferences-window';
-import { WorkspaceFolder } from './protocol';
+import type { WorkspaceFolder } from './protocol';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const WEBVIEW_DEV_URL = 'http://localhost:5173';
@@ -75,7 +76,7 @@ async function main(): Promise<void> {
 
   const sessionManager = new SessionManager(preferencesStore);
   const sessionStore = new SessionStore();
-  const bridge = createBridge(mainWindow, sessionManager, sessionStore);
+  const bridge = createBridge(mainWindow, sessionManager);
 
   // ── Preferences IPC (request/response) ──
   ipcMain.handle('preferences:get', (): Preferences => preferencesStore.get());
@@ -92,8 +93,8 @@ async function main(): Promise<void> {
         if (!stat.isFile()) {
           return { ok: false, error: `Not a regular file: ${candidate}` };
         }
-      } catch (err: any) {
-        return { ok: false, error: err?.message ?? 'Could not stat file' };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not stat file' };
       }
       if (process.platform !== 'win32') {
         try {

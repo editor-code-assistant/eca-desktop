@@ -2,8 +2,6 @@
 // Protocol types — IPC message payloads & JSON-RPC params
 // ============================================================
 
-import { EcaServerStatus } from './server';
-
 // ── Shared ──
 
 export interface WorkspaceFolder {

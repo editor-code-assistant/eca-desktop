@@ -2,8 +2,9 @@
 // Shared constants — extracted from across the codebase
 // ============================================================
 
-import * as path from 'path';
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 
 // ── GitHub / Server ──
 
@@ -22,7 +23,6 @@ export const DATA_DIR_NAME = '.eca-desktop';
 
 export function getDataDir(): string {
     const dir = path.join(os.homedir(), DATA_DIR_NAME);
-    const fs = require('fs') as typeof import('fs');
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }

@@ -130,8 +130,9 @@ declare global {
 
         const centerX = rainW / 2;
         const centerY = rainH / 2;
-        // Normalize distance so edge = 1, center = 0
-        const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+        // NOTE: Distance normalization happens per-column/per-char via `dx`
+        // and `dy` below, not against a global max. A previous `maxDist`
+        // derived from the canvas diagonal was never consumed.
 
         for (const col of rainColumns) {
             rainCtx.font = `${col.fontSize}px "SF Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace`;

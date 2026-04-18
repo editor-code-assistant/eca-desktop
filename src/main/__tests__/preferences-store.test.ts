@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type * as ConstantsModule from '../constants';
 
 // Mock electron (transitive import chain compatibility).
 vi.mock('electron', () => ({
@@ -12,7 +13,7 @@ vi.mock('electron', () => ({
 // the real ~/.eca-desktop/ folder.
 let tmpDir: string;
 vi.mock('../constants', async () => {
-    const actual = await vi.importActual<typeof import('../constants')>('../constants');
+    const actual = await vi.importActual<typeof ConstantsModule>('../constants');
     return {
         ...actual,
         getDataDir: () => tmpDir,

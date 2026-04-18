@@ -2,7 +2,8 @@
 // Editor actions — desktop-specific handlers (file, clipboard, URLs)
 // ============================================================
 
-import { BrowserWindow, dialog, shell } from 'electron';
+import type { BrowserWindow} from 'electron';
+import { dialog, shell } from 'electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,7 +13,7 @@ import {
     type ParseError,
 } from 'jsonc-parser';
 import { MIME_TO_EXTENSION, getGlobalConfigPath } from './constants';
-import {
+import type {
     EditorOpenFileData,
     EditorOpenUrlData,
     EditorSaveFileData,

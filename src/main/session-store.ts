@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getDataDir } from './constants';
-import { RecentWorkspace } from './protocol';
+import type { RecentWorkspace } from './protocol';
 
 const MAX_RECENTS = 20;
 

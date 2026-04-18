@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { Preferences } from '../main/preferences-store';
 
-type MessageCallback = (message: any) => void;
+// IPC payloads are intentionally typed as `unknown` at this boundary:
+// each renderer that consumes a callback re-declares `window.ecaDesktop`
+// with the precise message shape it expects (see e.g. sidebar.ts /
+// preferences.ts). Keeping preload loose avoids forcing every event
+// into a single union type.
+type MessageCallback = (message: unknown) => void;
 type VoidCallback = () => void;
 
 // Server message listeners
@@ -57,7 +63,7 @@ ipcRenderer.on('preferences-updated', (_event, data) => {
 // Expose API to the renderer via contextBridge
 contextBridge.exposeInMainWorld('ecaDesktop', {
     // ── Server message transport ──
-    send: (message: any) => {
+    send: (message: unknown) => {
         ipcRenderer.send('webview-message', message);
     },
     onMessage: (callback: MessageCallback) => {
@@ -140,7 +146,7 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
 
     // ── Preferences (request/response via invoke/handle) ──
     getPreferences: () => ipcRenderer.invoke('preferences:get'),
-    setPreferences: (patch: any) => ipcRenderer.invoke('preferences:set', patch),
+    setPreferences: (patch: Partial<Preferences>) => ipcRenderer.invoke('preferences:set', patch),
     pickServerBinary: () => ipcRenderer.invoke('preferences:pick-binary'),
     onPreferencesUpdated: (callback: MessageCallback) => {
         preferencesUpdatedListeners.push(callback);

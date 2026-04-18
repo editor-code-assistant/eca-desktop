@@ -2,13 +2,12 @@
 // Message router — data-driven dispatch replacing the switch
 // ============================================================
 
-import { BrowserWindow } from 'electron';
-import * as rpc from 'vscode-jsonrpc/node';
+import type { BrowserWindow } from 'electron';
+import type * as rpc from 'vscode-jsonrpc/node';
 import * as rpcTypes from './rpc';
-import { ChatState } from './chat-state';
+import type { ChatState } from './chat-state';
 import * as editorActions from './editor-actions';
-import { EcaServer, EcaServerStatus } from './server';
-import { IpcMessage, WorkspaceFolder } from './protocol';
+import type { IpcMessage, WorkspaceFolder, McpAddServerParams } from './protocol';
 
 type SendFn = (type: string, data: unknown) => void;
 
@@ -20,6 +19,13 @@ interface RouteContext {
     workspaceFolders: WorkspaceFolder[];
 }
 
+// Route handlers receive the raw webview IPC payload as a string-indexed
+// bag. Using `any` for the values here is deliberate: the router is a
+// dynamic dispatch layer over many heterogeneous message shapes, and
+// narrowing per-field would require bespoke types per route (a much
+// bigger refactor than this file warrants). Individual handlers cast
+// each field to the shape they expect.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteHandler = (ctx: RouteContext, data: Record<string, any>) => Promise<void> | void;
 
 // ── Route table ──
@@ -28,7 +34,7 @@ const routes: Record<string, RouteHandler> = {
 
     // ── Lifecycle ──
 
-    'webview/ready': (ctx) => {
+    'webview/ready': (_ctx) => {
         // No-op: rehydration is handled by did-finish-load in bridge
     },
 
@@ -190,7 +196,14 @@ const routes: Record<string, RouteHandler> = {
             if (data[k] !== undefined) params[k] = data[k];
         }
         try {
-            const result = await ctx.conn.sendRequest(rpcTypes.mcpAddServer, params as any);
+            // Assembled above to match the McpAddServerParams shape. The
+            // cast is the narrowest honest statement: we build a bag of
+            // known-fields but TS can't prove the union-of-transports
+            // invariant structurally.
+            const result = await ctx.conn.sendRequest(
+                rpcTypes.mcpAddServer,
+                params as McpAddServerParams,
+            );
             ctx.sendToRenderer('mcp/addServer', { requestId: data.requestId, ...result });
         } catch (err) {
             ctx.sendToRenderer('mcp/addServer', {

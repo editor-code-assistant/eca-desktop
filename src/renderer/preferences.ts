@@ -204,8 +204,8 @@ const CATEGORIES: Category[] = [
                     showError(result.error ?? 'Could not save theme.');
                     select.value = current.theme ?? 'dark';
                 }
-            } catch (err: any) {
-                showError(err?.message ?? 'Unexpected error while saving.');
+            } catch (err) {
+                showError(err instanceof Error ? err.message : 'Unexpected error while saving.');
                 select.value = current.theme ?? 'dark';
             }
         });
@@ -342,8 +342,8 @@ const CATEGORIES: Category[] = [
                 } else {
                     showError(result.error ?? 'Could not save preferences.');
                 }
-            } catch (err: any) {
-                showError(err?.message ?? 'Unexpected error while saving.');
+            } catch (err) {
+                showError(err instanceof Error ? err.message : 'Unexpected error while saving.');
             }
         }
 

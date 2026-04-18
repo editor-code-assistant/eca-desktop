@@ -1,5 +1,5 @@
 import * as rpc from 'vscode-jsonrpc/node';
-import {
+import type {
     ChatPromptParams, ChatPromptResult,
     ChatDeleteParams,
     ChatRollbackParams,

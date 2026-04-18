@@ -98,10 +98,14 @@ export class PreferencesStore {
 
     clearServerBinaryPath(): Preferences {
         const next: Preferences = { schemaVersion: 1 };
-        // Preserve any other future fields (none today).
+        // Preserve any other future fields (none today). We widen to an
+        // indexed record just for this copy step — `Preferences` is a
+        // sealed shape, but when a newer schema version adds fields we
+        // want to carry them through unchanged.
+        const sink = next as Preferences & Record<string, unknown>;
         for (const [key, value] of Object.entries(this.preferences)) {
             if (key === 'serverBinaryPath' || key === 'schemaVersion') continue;
-            (next as any)[key] = value;
+            sink[key] = value;
         }
         this.preferences = next;
         this.save();
