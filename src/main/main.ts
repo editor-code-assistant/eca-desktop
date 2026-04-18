@@ -198,7 +198,11 @@ async function main(): Promise<void> {
     sessionManager.activeSessionId = session.id;
     sessionStore.addRecent({ uri: workspaceFolder.uri, name: workspaceFolder.name });
 
-    // Register notifications BEFORE starting so we capture status transitions
+    // Register the status listener BEFORE starting so the very first
+    // setStatus(Starting) inside `start()` reaches the renderer. This
+    // inline listener is overwritten by bridge.registerServerNotifications
+    // below (invoked via onConnectionReady from within `start()` itself);
+    // both versions behave identically so the hand-off is seamless.
     session.ecaServer.onStatusChanged = (status) => {
       if (session.id === sessionManager.activeSessionId) {
         mainWindow.webContents.send('server-message', {
@@ -207,6 +211,18 @@ async function main(): Promise<void> {
         });
       }
       bridge.sendSessionListUpdate();
+    };
+
+    // Register JSON-RPC notification handlers the moment the connection
+    // is live — BEFORE `initialize` is sent. The ECA server emits
+    // `$/progress` (plus a burst of `config/updated`, `tool/serverUpdated`,
+    // `providers/updated`, etc.) from inside its `initialized` handler;
+    // handlers registered after `start()` resolves miss those events
+    // because vscode-jsonrpc drops notifications with no handler at the
+    // time of arrival (no buffering, no replay). See
+    // EcaServer.onConnectionReady for the full rationale.
+    session.ecaServer.onConnectionReady = () => {
+      bridge.registerServerNotifications(session);
     };
 
     bridge.sendSessionListUpdate();
@@ -220,12 +236,15 @@ async function main(): Promise<void> {
     }
 
     try {
-      // `start()` only resolves after the server has processed `initialize`
-      // AND the client has sent `initialized` — which is exactly when the
-      // server has rehydrated its persisted chats from disk and is safe to
-      // answer `chat/list`.
+      // `start()` resolves once `initialize` has round-tripped AND
+      // `initialized` has been sent — at which point the server has
+      // rehydrated its persisted chats from disk and is safe to answer
+      // `chat/list`. Server status on resolve is either `Initializing`
+      // (post-init async work still running) or `Running` (fast path /
+      // no progress emitted at all). All notification handlers were
+      // already wired via the `onConnectionReady` hook above, so there
+      // is intentionally no post-start register call here.
       await session.ecaServer.start([workspaceFolder]);
-      bridge.registerServerNotifications(session);
 
       // Server is now Running — send status + workspace to renderer
       // (the webview/ready message was already handled before this session existed)

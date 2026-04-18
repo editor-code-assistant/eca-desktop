@@ -285,7 +285,18 @@ export function createBridge(
         // src/main/protocol.ts for the payload shape and the corresponding
         // eca-emacs handler (eca--handle-progress) for the expected
         // "N/M · title" rendering contract.
+        //
+        // We also hand the params to the EcaServer so it can update its
+        // init-task tracker and drive the Initializing → Running
+        // transition once every task has reached its matching `finish`.
+        // Doing this in the main process (instead of relying on the
+        // renderer) keeps the lifecycle state machine co-located with
+        // the JSON-RPC connection that owns it and lets the
+        // `webview-message` drop-gate correctly reject prompts until
+        // init completes — even if the webview is reloading or a
+        // $/progress notification lands between IPC boundaries.
         conn.onNotification(rpc.progress, (params) => {
+            session.ecaServer.recordInitProgress(params);
             if (session.id === sessionManager.activeSessionId) {
                 sendToRenderer('$/progress', params);
             }
