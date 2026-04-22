@@ -98,43 +98,34 @@ declare global {
     let isOpen = false;
     let isCollapsed = false;
 
-    // ── Collapse toggle button (lives in the content-side titlebar) ──
+    // ── Collapse toggle button (sits over the sidebar's vertical separator) ──
 
     const collapseBtn = document.createElement('button');
     collapseBtn.className = 'sidebar-collapse-btn';
     collapseBtn.title = 'Toggle sidebar (⌘B)';
     collapseBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <line x1="9" y1="3" x2="9" y2="21"/>
-        <polyline points="17 9 14 12 17 15"/>
+        <polyline points="15 6 9 12 15 18"/>
     </svg>`;
     collapseBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         window.ecaDesktop?.toggleSidebar();
     });
 
-    // Insert into the content-side titlebar so it never competes with
-    // traffic lights inside the sidebar.
-    const titlebar = document.querySelector('.desktop-titlebar')!;
-    titlebar.appendChild(collapseBtn);
+    // Insert into the sidebar itself, positioned over the vertical separator.
+    sidebar.appendChild(collapseBtn);
 
     function applySidebarCollapse(collapsed: boolean): void {
         isCollapsed = collapsed;
         sidebar.classList.toggle('sidebar--collapsed', collapsed);
         appLayout.classList.toggle('sidebar-collapsed', collapsed);
 
-        // Sidebar-panel icon: shows a panel with left section filled.
-        // When collapsed the arrow points right (expand), when expanded it points left (collapse).
+        // Simple chevron: points left when expanded (collapse), right when collapsed (expand)
         collapseBtn.innerHTML = collapsed
             ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <line x1="9" y1="3" x2="9" y2="21"/>
-                <polyline points="14 9 17 12 14 15"/>
+                <polyline points="9 6 15 12 9 18"/>
             </svg>`
             : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <line x1="9" y1="3" x2="9" y2="21"/>
-                <polyline points="17 9 14 12 17 15"/>
+                <polyline points="15 6 9 12 15 18"/>
             </svg>`;
         collapseBtn.title = collapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)';
         // Re-render so the DOM reflects collapsed vs expanded layout

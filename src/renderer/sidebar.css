@@ -65,9 +65,8 @@
     --sidebar-toolbar-h: 38px;
 }
 
-/* The collapse button now lives in .desktop-titlebar (content side).
-   No macOS-specific absolute positioning needed — it flows naturally
-   in the titlebar's flexbox and never overlaps with traffic lights. */
+/* The collapse button lives inside the sidebar, absolutely positioned
+   over the vertical separator at its top edge. */
 
 .sidebar-title-group {
     display: flex;
@@ -129,16 +128,22 @@
     stroke-linecap: round;
 }
 
-/* ── Collapse toggle button — fixed position near traffic lights ── */
+/* ── Collapse toggle button — fixed-positioned over the sidebar's vertical separator ──
+   Uses position:fixed so it escapes the sidebar's overflow:hidden.
+   left is driven by --sidebar-width which flips on collapse/expand. */
 .sidebar-collapse-btn {
     -webkit-app-region: no-drag;
     position: fixed;
-    top: 5px;
-    left: 80px;
+    /* Sit just below the sidebar header (New Chat button), at the
+       boundary where the session list begins. Header height is
+       toolbar-h + header content (~46px) — centre the 28px circle there. */
+    top: calc(var(--sidebar-toolbar-h, 52px) + 32px);
+    /* Centre the 28px button horizontally over the 1px separator at the sidebar edge */
+    left: calc(var(--sidebar-width) - 14px);
     z-index: 10000;
-    background: none;
+    background: var(--eca-sidebar-bg, #0e0e1a);
     border: none;
-    border-radius: 6px;
+    border-radius: 50%;
     width: 28px;
     height: 28px;
     color: var(--eca-item-selectable-fg);
@@ -148,7 +153,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: color 0.15s ease, background 0.15s ease;
+    transition: color 0.15s ease, background 0.15s ease,
+                left 0.2s ease, top 0.2s ease;
 }
 .sidebar-collapse-btn:hover {
     color: var(--eca-editor-fg);
@@ -177,6 +183,20 @@
 
     .sidebar--collapsed .sidebar-title-group {
         display: none;
+    }
+
+    /* In collapsed mode the button moves fully inside the 54px rail,
+       centred horizontally, between the + button and the first avatar. */
+    .sidebar--collapsed .sidebar-collapse-btn {
+        /* Centre 28px button in 54px rail: (54 - 28) / 2 = 13 */
+        left: 13px;
+        /* Below the header (toolbar-h + new-chat 32px + padding 6px + gap) */
+        top: calc(var(--sidebar-toolbar-h, 52px) + 42px);
+    }
+
+    /* Make room for the collapse button above the workspace avatars */
+    .sidebar--collapsed .sidebar-chat-list {
+        padding-top: 36px; /* 28px button + 8px breathing room */
     }
 
     .sidebar--collapsed .sidebar-new-chat-btn {

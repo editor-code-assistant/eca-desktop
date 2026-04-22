@@ -16,10 +16,6 @@ body.welcome-active .sidebar {
     display: none;
 }
 
-body.welcome-active .sidebar-collapse-btn {
-    display: none;
-}
-
 body.welcome-active .app-content {
     padding-top: 0;
 }
