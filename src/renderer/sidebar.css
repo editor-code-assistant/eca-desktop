@@ -147,6 +147,7 @@
     z-index: 10000;
     background: var(--eca-sidebar-bg, #0e0e1a);
     border: none;
+    border-right: 1px solid var(--eca-panel-border);
     border-radius: 50%;
     width: 28px;
     height: 28px;
@@ -196,6 +197,7 @@
         left: 13px;
         /* Below the header (toolbar-h + new-chat 32px + padding 6px + gap) */
         top: calc(var(--sidebar-toolbar-h, 52px) + 42px);
+        border-right: none;
     }
 
     /* Make room for the collapse button above the workspace avatars */
