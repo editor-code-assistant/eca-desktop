@@ -4,41 +4,80 @@
 
 /* ── App layout ── */
 .app-layout {
+    --sidebar-width: 260px;
     display: flex;
     height: 100vh;
     width: 100vw;
     overflow: hidden;
 }
 
+.app-layout.sidebar-collapsed {
+    --sidebar-width: 54px;
+}
+
 /* ── Sidebar ── */
 .sidebar {
-    width: 260px;
+    /* Height of the toolbar zone above sidebar content.
+       Non-macOS: matches header padding-top (14px).
+       macOS: overridden to 38px below for the traffic-light zone. */
+    --sidebar-toolbar-h: 14px;
+    width: var(--sidebar-width);
     flex-shrink: 0;
     background: var(--eca-sidebar-bg, #0e0e1a);
-    border-right: 1px solid var(--eca-panel-border);
+    /* No border-right here — the divider starts below the toolbar zone. */
     display: flex;
     flex-direction: column;
     overflow: hidden;
     user-select: none;
+    position: relative;
+    transition: width 0.2s ease;
+}
+
+/* Partial divider: a pseudo-element draws the 1px border from below the
+   toolbar zone (header) to the bottom of the sidebar. This leaves the
+   top toolbar area visually undivided — matching Finder/Linear style. */
+.sidebar::after {
+    content: '';
+    position: absolute;
+    top: var(--sidebar-toolbar-h, 52px);
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--eca-panel-border);
+    pointer-events: none;
+    z-index: 1;
+    transition: top 0.2s ease;
 }
 
 .sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 14px 16px;
+    gap: 8px;
+    padding: 14px 12px;
     -webkit-app-region: drag;
 }
 
-/* macOS: space for the traffic light buttons */
+/* macOS toolbar zone.
+   TOOLBAR_HEIGHT = 38px (mirrored from main.ts).
+   Traffic lights are vertically centered within this zone by Electron.
+   The sidebar header must reserve this space so content doesn't overlap.
+   --sidebar-toolbar-h drives the partial divider's starting point. */
 .platform-darwin .sidebar-header {
-    padding-top: 46px;
+    padding-top: 38px;
 }
+.platform-darwin .sidebar {
+    --sidebar-toolbar-h: 38px;
+}
+
+/* The collapse button lives inside the sidebar, absolutely positioned
+   over the vertical separator at its top edge. */
 
 .sidebar-title-group {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 1;
+    min-width: 0;
 }
 
 /* Sidebar header logo.
@@ -91,6 +130,215 @@
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
+}
+
+/* ── Collapse toggle button — fixed-positioned over the sidebar's vertical separator ──
+   Uses position:fixed so it escapes the sidebar's overflow:hidden.
+   left is driven by --sidebar-width which flips on collapse/expand. */
+.sidebar-collapse-btn {
+    -webkit-app-region: no-drag;
+    position: fixed;
+    /* Sit just below the sidebar header (New Chat button), at the
+       boundary where the session list begins. Header height is
+       toolbar-h + header content (~46px) — centre the 28px circle there. */
+    top: calc(var(--sidebar-toolbar-h, 52px) + 32px);
+    /* Centre the 28px button horizontally over the 1px separator at the sidebar edge */
+    left: calc(var(--sidebar-width) - 14px);
+    z-index: 10000;
+    background: var(--eca-sidebar-bg, #0e0e1a);
+    border: none;
+    border-right: 1px solid var(--eca-panel-border);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    color: var(--eca-item-selectable-fg);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background 0.15s ease,
+                left 0.2s ease, top 0.2s ease;
+}
+.sidebar-collapse-btn:hover {
+    color: var(--eca-editor-fg);
+    background: var(--eca-base-hover);
+}
+
+/* ═══════════════════════════════════════════════════
+ * Collapsed sidebar state (desktop only, ≥768px)
+ *
+ * The sidebar becomes a slim icon rail. Individual chats
+ * are hidden entirely. Each workspace is represented by
+ * a letter avatar with a chat-count badge. Clicking a
+ * workspace avatar expands the sidebar.
+ * ═══════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+    .sidebar--collapsed .sidebar-header {
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: 4px;
+        padding-right: 4px;
+        padding-bottom: 6px;
+        gap: 4px;
+        /* padding-top is inherited: 14px default, 46px on macOS */
+    }
+
+    .sidebar--collapsed .sidebar-title-group {
+        display: none;
+    }
+
+    /* In collapsed mode the button moves fully inside the 54px rail,
+       centred horizontally, between the + button and the first avatar. */
+    .sidebar--collapsed .sidebar-collapse-btn {
+        /* Centre 28px button in 54px rail: (54 - 28) / 2 = 13 */
+        left: 13px;
+        /* Below the header (toolbar-h + new-chat 32px + padding 6px + gap) */
+        top: calc(var(--sidebar-toolbar-h, 52px) + 42px);
+        border-right: none;
+    }
+
+    /* Make room for the collapse button above the workspace avatars */
+    .sidebar--collapsed .sidebar-chat-list {
+        padding-top: 36px; /* 28px button + 8px breathing room */
+    }
+
+    .sidebar--collapsed .sidebar-new-chat-btn {
+        padding: 0;
+        border: none;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+    /* Hide all text labels in collapsed mode */
+    .sidebar--collapsed .sidebar-btn-label {
+        display: none;
+    }
+
+    /* ── Hide individual chats, show-more, hints ── */
+    .sidebar--collapsed .sidebar-chat-item,
+    .sidebar--collapsed .sidebar-show-more,
+    .sidebar--collapsed .sidebar-session-hint,
+    .sidebar--collapsed .sidebar-empty {
+        display: none;
+    }
+
+    /* ── Workspace groups: letter avatar ── */
+    .sidebar--collapsed .sidebar-workspace-group {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .sidebar--collapsed .sidebar-workspace-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 4px;
+        cursor: pointer;
+        width: 100%;
+    }
+    .sidebar--collapsed .sidebar-workspace-name,
+    .sidebar--collapsed .sidebar-workspace-actions {
+        display: none;
+    }
+
+    /* The indicator becomes the letter avatar container */
+    .sidebar--collapsed .sidebar-workspace-indicator {
+        display: none;
+    }
+
+    /* Letter avatar — set by JS as .collapsed-ws-avatar */
+    .sidebar--collapsed .collapsed-ws-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--eca-editor-fg);
+        background: var(--eca-input-bg);
+        border: 2px solid transparent;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+        letter-spacing: -0.5px;
+        text-transform: uppercase;
+        user-select: none;
+        flex-shrink: 0;
+    }
+    .sidebar--collapsed .collapsed-ws-avatar:hover {
+        background: var(--eca-base-hover);
+    }
+
+    /* Active workspace — accent border */
+    .sidebar--collapsed .sidebar-workspace-group.active .collapsed-ws-avatar {
+        border-color: var(--eca-accent-fg);
+    }
+
+    /* Status colors on the avatar border */
+    .sidebar--collapsed .collapsed-ws-avatar.status-running {
+        border-color: #22c55e;
+    }
+    .sidebar--collapsed .collapsed-ws-avatar.status-starting {
+        border-color: #eab308;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+    .sidebar--collapsed .collapsed-ws-avatar.status-failed {
+        border-color: #ef4444;
+    }
+
+    /* Initials label */
+    .sidebar--collapsed .collapsed-ws-label {
+        pointer-events: none;
+    }
+
+    /* Chat count badge — sits at bottom-right inside the avatar */
+    .sidebar--collapsed .collapsed-ws-badge {
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        min-width: 15px;
+        height: 15px;
+        border-radius: 8px;
+        background: var(--eca-accent-fg);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 3px;
+        line-height: 1;
+        pointer-events: none;
+        border: 2px solid var(--eca-sidebar-bg, #080808);
+    }
+    /* Hide badge when there are 0 chats */
+    .sidebar--collapsed .collapsed-ws-badge:empty,
+    .sidebar--collapsed .collapsed-ws-badge[data-count="0"] {
+        display: none;
+    }
+
+    /* ── Bottom actions: icon-only, centered ── */
+    .sidebar--collapsed .sidebar-bottom-actions {
+        padding: 8px 4px;
+        display: flex;
+        justify-content: center;
+    }
+    .sidebar--collapsed .sidebar-open-folder-btn {
+        padding: 6px;
+        border-radius: 8px;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+    }
 }
 
 /* ── Chat list ── */
@@ -455,6 +703,36 @@
     .sidebar.open {
         transform: translateX(0);
         box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Hide collapse button on mobile — mobile uses the drawer toggle instead */
+    .sidebar-collapse-btn {
+        display: none !important;
+    }
+
+    /* Mobile uses a full border — no partial divider needed */
+    .sidebar::after {
+        display: none;
+    }
+    .sidebar {
+        border-right: 1px solid var(--eca-panel-border);
+    }
+
+    /* Ignore collapsed state on mobile — the drawer handles visibility */
+    .sidebar.sidebar--collapsed {
+        width: 280px;
+    }
+    .sidebar.sidebar--collapsed .sidebar-title-group,
+    .sidebar.sidebar--collapsed .sidebar-btn-label,
+    .sidebar.sidebar--collapsed .sidebar-chat-title,
+    .sidebar.sidebar--collapsed .sidebar-chat-date,
+    .sidebar.sidebar--collapsed .sidebar-chat-delete,
+    .sidebar.sidebar--collapsed .sidebar-workspace-name,
+    .sidebar.sidebar--collapsed .sidebar-workspace-actions,
+    .sidebar.sidebar--collapsed .sidebar-show-more,
+    .sidebar.sidebar--collapsed .sidebar-session-hint,
+    .sidebar.sidebar--collapsed .sidebar-empty {
+        display: revert;
     }
 
     .sidebar-overlay {

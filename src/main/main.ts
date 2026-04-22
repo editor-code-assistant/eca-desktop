@@ -26,14 +26,25 @@ if (process.platform === 'linux' && process.env.ECA_DISABLE_GPU) {
   app.disableHardwareAcceleration();
 }
 
+// macOS toolbar constants — traffic lights are vertically centered within
+// this height.  The same value is used in the renderer (CSS custom property
+// --toolbar-h) to position the sidebar toggle button at the same level.
+const TOOLBAR_HEIGHT = 38;           // px – height of our custom toolbar zone
+const TRAFFIC_LIGHTS_HEIGHT = 16;    // px – native macOS button height
+
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
     minWidth: 500,
     minHeight: 400,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 15 },
+    // 'hidden' (not 'hiddenInset') gives full control over traffic-light
+    // positioning without the extra OS-applied inset offset.
+    titleBarStyle: 'hidden',
+    trafficLightPosition: {
+      x: 15,
+      y: Math.floor((TOOLBAR_HEIGHT - TRAFFIC_LIGHTS_HEIGHT) / 2),
+    },
     frame: process.platform === 'darwin' ? false : true,
     backgroundColor: '#0c0c0c',
     icon: path.join(__dirname, '../resources/icon.png'),
@@ -151,10 +162,32 @@ async function main(): Promise<void> {
     return result.filePaths[0];
   });
 
+  // ── Sidebar collapse ──
+  function toggleSidebarCollapse(): void {
+    const current = preferencesStore.get().sidebarCollapsed ?? false;
+    const next = !current;
+    preferencesStore.set({ sidebarCollapsed: next });
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('sidebar-collapse-changed', { collapsed: next });
+      }
+    }
+  }
+
+  ipcMain.on('sidebar-collapse-toggle', () => {
+    toggleSidebarCollapse();
+  });
+
+  // Expose for the menu accelerator (View > Toggle Sidebar)
+  (global as any).__ecaToggleSidebarCollapse = toggleSidebarCollapse;
+
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('welcome-data', {
       recentWorkspaces: sessionStore.getRecents(),
     });
+    // Send initial sidebar collapse state so the renderer can apply it before first paint
+    const collapsed = preferencesStore.get().sidebarCollapsed ?? false;
+    mainWindow.webContents.send('sidebar-collapse-changed', { collapsed });
   });
 
   ipcMain.on('session-create', async (_event, data: { uri?: string }) => {

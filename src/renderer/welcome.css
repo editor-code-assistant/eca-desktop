@@ -16,10 +16,6 @@ body.welcome-active .sidebar {
     display: none;
 }
 
-body.welcome-active .desktop-titlebar {
-    left: 0;
-}
-
 body.welcome-active .app-content {
     padding-top: 0;
 }

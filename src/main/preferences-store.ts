@@ -28,6 +28,9 @@ export interface Preferences {
      *  welcome screen, and embedded chat webview via --eca-* overrides).
      *  When unset, the renderer defaults to 'dark'. */
     theme?: Theme;
+    /** Whether the sidebar is collapsed to an icon rail (48px) instead of
+     *  the full 260px width. When unset, defaults to `false` (expanded). */
+    sidebarCollapsed?: boolean;
 }
 
 const DEFAULT_PREFERENCES: Preferences = {

@@ -47,6 +47,10 @@ interface ChatNavigatePayload {
     index?: number;
 }
 
+interface SidebarCollapseData {
+    collapsed: boolean;
+}
+
 interface EcaDesktopApi {
     send: (message: unknown) => void;
     onMessage: (callback: (message: unknown) => void) => void;
@@ -66,6 +70,9 @@ interface EcaDesktopApi {
     createSession: (uri?: string) => void;
     removeSession: (sessionId: string) => void;
     onSessionListUpdate: (callback: (data: SessionListUpdate) => void) => void;
+    toggleSidebar: () => void;
+    onSidebarCollapseChanged: (callback: (data: SidebarCollapseData) => void) => void;
+    removeSidebarCollapseListener: (callback: (data: SidebarCollapseData) => void) => void;
 }
 
 declare global {
@@ -81,6 +88,7 @@ declare global {
     const chatList = document.getElementById('sidebar-chat-list')!;
     const newChatBtn = document.getElementById('sidebar-new-chat')!;
     const overlay = document.getElementById('sidebar-overlay')!;
+    const appLayout = document.querySelector('.app-layout')!;
 
     let entries: ChatEntry[] = [];
     let selectedId: string | null = null;
@@ -88,6 +96,42 @@ declare global {
     let sessions: SessionInfo[] = [];
     let activeSessionId: string | null = null;
     let isOpen = false;
+    let isCollapsed = false;
+
+    // ── Collapse toggle button (sits over the sidebar's vertical separator) ──
+
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'sidebar-collapse-btn';
+    collapseBtn.title = 'Toggle sidebar (⌘B)';
+    collapseBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 6 9 12 15 18"/>
+    </svg>`;
+    collapseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.ecaDesktop?.toggleSidebar();
+    });
+
+    // Insert into the sidebar itself, positioned over the vertical separator.
+    sidebar.appendChild(collapseBtn);
+
+    function applySidebarCollapse(collapsed: boolean): void {
+        isCollapsed = collapsed;
+        sidebar.classList.toggle('sidebar--collapsed', collapsed);
+        appLayout.classList.toggle('sidebar-collapsed', collapsed);
+
+        // Simple chevron: points left when expanded (collapse), right when collapsed (expand)
+        collapseBtn.innerHTML = collapsed
+            ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 6 15 12 9 18"/>
+            </svg>`
+            : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 6 9 12 15 18"/>
+            </svg>`;
+        collapseBtn.title = collapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)';
+        // Re-render so the DOM reflects collapsed vs expanded layout
+        // (avatars are only created when isCollapsed is true)
+        render();
+    }
 
     // ── Show-more / collapse state ──
     //
@@ -327,6 +371,47 @@ declare global {
                 header.appendChild(indicator);
                 header.appendChild(name);
                 header.appendChild(actions);
+
+                // In collapsed mode, add a letter avatar that expands the sidebar on click
+                if (isCollapsed) {
+                    const wsName = session.workspaceFolder.name;
+                    const initials = wsName
+                        .split(/[-_ ]+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map(w => w[0])
+                        .join('');
+
+                    const avatar = document.createElement('div');
+                    avatar.className = 'collapsed-ws-avatar';
+                    avatar.classList.add('status-' + session.status.toLowerCase());
+                    avatar.title = wsName;
+
+                    // Letter label — in its own span so the badge doesn't interfere
+                    const label = document.createElement('span');
+                    label.className = 'collapsed-ws-label';
+                    label.textContent = initials || '?';
+                    avatar.appendChild(label);
+
+                    // Chat count badge (computed from the full entries list)
+                    const chatCount = entries.filter(
+                        (e) => e.workspaceFolderName === wsName
+                    ).length;
+                    const badge = document.createElement('span');
+                    badge.className = 'collapsed-ws-badge';
+                    badge.textContent = chatCount > 0 ? String(chatCount) : '';
+                    badge.dataset.count = String(chatCount);
+                    avatar.appendChild(badge);
+
+                    // Click avatar → expand sidebar to reveal chats
+                    avatar.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        window.ecaDesktop?.toggleSidebar();
+                    });
+
+                    header.appendChild(avatar);
+                }
+
                 group.appendChild(header);
 
                 // Filter entries for this session's workspace
@@ -495,6 +580,10 @@ declare global {
             sessions = data.sessions || [];
             activeSessionId = data.activeSessionId;
             render();
+        });
+
+        window.ecaDesktop.onSidebarCollapseChanged((data: SidebarCollapseData) => {
+            applySidebarCollapse(data.collapsed);
         });
     }
 

@@ -60,6 +60,12 @@ ipcRenderer.on('preferences-updated', (_event, data) => {
     preferencesUpdatedListeners.forEach(cb => cb(data));
 });
 
+// Sidebar: collapse state listeners
+const sidebarCollapseListeners: MessageCallback[] = [];
+ipcRenderer.on('sidebar-collapse-changed', (_event, data) => {
+    sidebarCollapseListeners.forEach(cb => cb(data));
+});
+
 // Expose API to the renderer via contextBridge
 contextBridge.exposeInMainWorld('ecaDesktop', {
     // ── Server message transport ──
@@ -142,6 +148,18 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
     removeWelcomeDataListener: (callback: MessageCallback) => {
         const index = welcomeDataListeners.indexOf(callback);
         if (index !== -1) welcomeDataListeners.splice(index, 1);
+    },
+
+    // ── Sidebar collapse ──
+    toggleSidebar: () => {
+        ipcRenderer.send('sidebar-collapse-toggle');
+    },
+    onSidebarCollapseChanged: (callback: MessageCallback) => {
+        sidebarCollapseListeners.push(callback);
+    },
+    removeSidebarCollapseListener: (callback: MessageCallback) => {
+        const index = sidebarCollapseListeners.indexOf(callback);
+        if (index !== -1) sidebarCollapseListeners.splice(index, 1);
     },
 
     // ── Preferences (request/response via invoke/handle) ──
