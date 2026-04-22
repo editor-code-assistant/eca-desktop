@@ -128,6 +128,14 @@ declare global {
                 <polyline points="15 6 9 12 15 18"/>
             </svg>`;
         collapseBtn.title = collapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)';
+
+        // Keep the desktop titlebar drag region aligned with the sidebar edge
+        // so it doesn't overlap content buttons.
+        const titlebar = document.querySelector<HTMLElement>('.desktop-titlebar');
+        if (titlebar) {
+            titlebar.style.left = collapsed ? '54px' : '260px';
+        }
+
         // Re-render so the DOM reflects collapsed vs expanded layout
         // (avatars are only created when isCollapsed is true)
         render();

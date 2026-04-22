@@ -10,16 +10,19 @@
     <link href="./welcome.css" rel="stylesheet">
     <link href="../../eca-webview/dist/assets/index.css" rel="stylesheet">
     <style>
-        /* macOS titlebar drag region — covers content area (sidebar has its own) */
+        /* macOS titlebar drag region — covers content area (sidebar has its own).
+           left is set to the sidebar width so the drag region doesn't overlap
+           content buttons. JS updates it on sidebar collapse/expand. */
         .desktop-titlebar {
             -webkit-app-region: drag;
             height: 38px;
             position: fixed;
             top: 0;
-            left: 0;
+            left: 260px;
             right: 0;
             z-index: 9999;
             pointer-events: none;
+            transition: left 0.2s ease;
         }
         @media (max-width: 767px) {
             .desktop-titlebar { left: 0; }
