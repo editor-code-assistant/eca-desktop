@@ -17,6 +17,10 @@
 
 /* ── Sidebar ── */
 .sidebar {
+    /* Height of the toolbar zone above sidebar content.
+       Non-macOS: matches header padding-top (14px).
+       macOS: overridden to 38px below for the traffic-light zone. */
+    --sidebar-toolbar-h: 14px;
     width: var(--sidebar-width);
     flex-shrink: 0;
     background: var(--eca-sidebar-bg, #0e0e1a);
