@@ -33,19 +33,28 @@ const TOOLBAR_HEIGHT = 38;           // px – height of our custom toolbar zone
 const TRAFFIC_LIGHTS_HEIGHT = 16;    // px – native macOS button height
 
 function createWindow(): BrowserWindow {
+  const isMac = process.platform === 'darwin';
   const mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
     minWidth: 500,
     minHeight: 400,
-    // 'hidden' (not 'hiddenInset') gives full control over traffic-light
-    // positioning without the extra OS-applied inset offset.
-    titleBarStyle: 'hidden',
-    trafficLightPosition: {
-      x: 15,
-      y: Math.floor((TOOLBAR_HEIGHT - TRAFFIC_LIGHTS_HEIGHT) / 2),
-    },
-    frame: process.platform === 'darwin' ? false : true,
+    // macOS: use 'hidden' (not 'hiddenInset') to get full control over
+    // traffic-light positioning without the extra OS-applied inset offset.
+    // Linux/Windows: keep the native chrome ('default') so the native
+    // application menu bar (File, View, About, ...) remains visible.
+    titleBarStyle: isMac ? 'hidden' : 'default',
+    // trafficLightPosition is a macOS-only option; gate it explicitly
+    // instead of relying on Electron to ignore it on other platforms.
+    ...(isMac
+      ? {
+          trafficLightPosition: {
+            x: 15,
+            y: Math.floor((TOOLBAR_HEIGHT - TRAFFIC_LIGHTS_HEIGHT) / 2),
+          },
+        }
+      : {}),
+    frame: isMac ? false : true,
     backgroundColor: '#0c0c0c',
     icon: path.join(__dirname, '../resources/icon.png'),
     webPreferences: {
