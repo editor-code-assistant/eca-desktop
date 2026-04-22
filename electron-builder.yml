@@ -35,6 +35,10 @@ linux:
   category: Development
   maintainer: Editor Code Assistant
 
+deb:
+  fpm:
+    - "--after-install=build/linux-after-install.sh"
+
 publish:
   provider: github
   owner: editor-code-assistant
