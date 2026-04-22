@@ -10,8 +10,20 @@
     <link href="./welcome.css" rel="stylesheet">
     <link href="../../eca-webview/dist/assets/index.css" rel="stylesheet">
     <style>
-        /* macOS titlebar drag region — covers content area (sidebar has its own) */
+        /* macOS-only titlebar drag region.
+         *
+         * The native window frame is hidden on macOS (see main.ts
+         * `titleBarStyle: 'hidden'` + `frame: false`), so we need a
+         * custom drag region to let users move the window by the top
+         * 38px. On Windows/Linux the OS draws its own titlebar above
+         * the webview area, so this div must NOT render there — even
+         * with pointer-events:none, `-webkit-app-region: drag` still
+         * captures clicks at the OS level, which would make the top
+         * 38px of the ChatSubHeader (MCPs, usage, trust, export,
+         * settings…) un-clickable. Gated on the .platform-darwin body
+         * class set at the bottom of this file. */
         .desktop-titlebar {
+            display: none;
             -webkit-app-region: drag;
             height: 38px;
             position: fixed;
@@ -21,8 +33,8 @@
             z-index: 9999;
             pointer-events: none;
         }
-        @media (max-width: 767px) {
-            .desktop-titlebar { left: 0; }
+        .platform-darwin .desktop-titlebar {
+            display: block;
         }
         /* Ensure interactive elements are not draggable */
         button, input, textarea, select, a, [role="button"] {
