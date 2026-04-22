@@ -34,18 +34,15 @@ interface SessionListUpdate {
     activeSessionId: string | null;
 }
 
-interface EcaDesktopApi {
+interface WelcomeEcaDesktopApi {
     createSession: (uri?: string) => void;
     removeSession: (sessionId: string) => void;
     onSessionListUpdate: (callback: (data: SessionListUpdate) => void) => void;
     onWelcomeData: (callback: (data: WelcomeData) => void) => void;
 }
 
-declare global {
-    interface Window {
-        ecaDesktop?: EcaDesktopApi;
-    }
-}
+// Local-cast pattern — see preferences.ts / *-bootstrap.ts for why.
+type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
 
 (function () {
     'use strict';
@@ -340,7 +337,7 @@ declare global {
             '<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>' +
             'New Session';
         openBtn.addEventListener('click', () => {
-            window.ecaDesktop?.createSession();
+            (window as unknown as WelcomeWindow).ecaDesktop?.createSession();
         });
         card.appendChild(openBtn);
 
@@ -387,7 +384,7 @@ declare global {
                 item.appendChild(time);
 
                 item.addEventListener('click', () => {
-                    window.ecaDesktop?.createSession(ws.uri);
+                    (window as unknown as WelcomeWindow).ecaDesktop?.createSession(ws.uri);
                 });
 
                 recentsList.appendChild(item);
@@ -406,13 +403,14 @@ declare global {
     }
 
     // ── IPC listeners ──
-    if (window.ecaDesktop) {
-        window.ecaDesktop.onWelcomeData((data: WelcomeData) => {
+    const api = (window as unknown as WelcomeWindow).ecaDesktop;
+    if (api) {
+        api.onWelcomeData((data: WelcomeData) => {
             recentWorkspaces = data.recentWorkspaces || [];
             render();
         });
 
-        window.ecaDesktop.onSessionListUpdate((data: SessionListUpdate) => {
+        api.onSessionListUpdate((data: SessionListUpdate) => {
             updateVisibility(data.sessions);
         });
     }

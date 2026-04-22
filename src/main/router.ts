@@ -196,13 +196,13 @@ const routes: Record<string, RouteHandler> = {
             if (data[k] !== undefined) params[k] = data[k];
         }
         try {
-            // Assembled above to match the McpAddServerParams shape. The
-            // cast is the narrowest honest statement: we build a bag of
-            // known-fields but TS can't prove the union-of-transports
-            // invariant structurally.
+            // Assembled above to match the McpAddServerParams shape. TS
+            // can't prove the union-of-transports invariant structurally,
+            // so we go through `unknown` rather than direct-cast from
+            // Record<string, unknown>.
             const result = await ctx.conn.sendRequest(
                 rpcTypes.mcpAddServer,
-                params as McpAddServerParams,
+                params as unknown as McpAddServerParams,
             );
             ctx.sendToRenderer('mcp/addServer', { requestId: data.requestId, ...result });
         } catch (err) {
@@ -266,8 +266,18 @@ const routes: Record<string, RouteHandler> = {
 
     // ── Editor actions (desktop-only, not routed to server) ──
 
-    'editor/openFile': (_ctx, data) => {
-        editorActions.openFile({ path: data.path as string });
+    'editor/openFile': (ctx, data) => {
+        // Feed the active workspace roots to the openFile scope check so
+        // a compromised renderer can't use `shell.openPath` to launch
+        // arbitrary executables outside the user's project. Roots come
+        // as file:// URIs; convert each to a filesystem path.
+        const roots = ctx.workspaceFolders
+            .map((f) => {
+                try { return new URL(f.uri).pathname; }
+                catch { return null; }
+            })
+            .filter((p): p is string => p !== null);
+        editorActions.openFile({ path: data.path as string }, roots);
     },
 
     'editor/openUrl': (_ctx, data) => {

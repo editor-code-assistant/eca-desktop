@@ -488,7 +488,10 @@ export type IpcMessageType =
     | 'editor/toggleSidebar'
     | 'editor/openGlobalConfig'
     | 'editor/readGlobalConfig'
-    | 'editor/writeGlobalConfig';
+    | 'editor/writeGlobalConfig'
+    | 'logs/snapshot'
+    | 'logs/clear'
+    | 'logs/openFolder';
 
 export interface IpcMessage {
     type: IpcMessageType;

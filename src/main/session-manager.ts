@@ -58,11 +58,18 @@ export class SessionManager extends EventEmitter {
         return session;
     }
 
-    removeSession(id: string): void {
+    async removeSession(id: string): Promise<void> {
         const session = this.sessions.get(id);
         if (!session) return;
 
-        session.ecaServer.stop();
+        try {
+            await session.ecaServer.stop();
+        } catch (err) {
+            console.error('[SessionManager] Error stopping server for session', id, err);
+            // Swallow: we still want to remove the session from the map
+            // even if server shutdown fails, so we don't leak state.
+        }
+
         this.sessions.delete(id);
         this.emit('session-removed', id);
 

@@ -36,11 +36,12 @@ interface PreferencesApi {
     removePreferencesUpdatedListener: (cb: (prefs: Preferences) => void) => void;
 }
 
-declare global {
-    interface Window {
-        ecaDesktop?: PreferencesApi & Record<string, unknown>;
-    }
-}
+// Use a local cast instead of `declare global` so this bundle's
+// `ecaDesktop` shape does not collide with `sidebar.ts` / `welcome.ts`
+// / the bootstrap files. (Each renderer entry point is its own bundle
+// at runtime but shares one `tsc` program at compile time; conflicting
+// `declare global` declarations break the latter.)
+type PreferencesWindow = Window & { ecaDesktop?: PreferencesApi };
 
 interface Category {
     id: string;
@@ -71,7 +72,7 @@ const CATEGORIES: Category[] = [
 (function () {
     'use strict';
 
-    const api = window.ecaDesktop;
+    const api = (window as unknown as PreferencesWindow).ecaDesktop;
     if (!api) {
         console.error('[Preferences] ecaDesktop bridge is not available');
         return;

@@ -5,6 +5,11 @@ import * as editorActions from './editor-actions';
 import { getLogStore } from './log-store';
 import { openPreferencesWindow } from './preferences-window';
 
+// Use `app.isPackaged` instead of `NODE_ENV` so dev-only affordances
+// (DevTools, etc.) work under `npm run dev` regardless of environment
+// variables. See code-review M-1.
+const IS_DEV = !app.isPackaged;
+
 export function createMenu(mainWindow: BrowserWindow) {
     const isMac = process.platform === 'darwin';
 
@@ -147,17 +152,22 @@ export function createMenu(mainWindow: BrowserWindow) {
                         if (typeof toggle === 'function') toggle();
                     },
                 },
+                {
+                    // Inner-webview sidebar toggle (distinct from the native
+                    // sidebar collapse above). Re-keyed to avoid the prior
+                    // accelerator collision on CmdOrCtrl+B.
+                    label: 'Toggle Inner Sidebar',
+                    accelerator: 'CmdOrCtrl+Shift+B',
+                    click: () => sendRenderer('sidebar-toggle'),
+                },
                 { type: 'separator' },
                 { role: 'reload' },
                 { role: 'forceReload' },
-                { role: 'toggleDevTools' },
+                // DevTools is a dev-only affordance; hide it from release
+                // builds to reduce the attack/confusion surface for end users.
+                ...(IS_DEV ? [{ role: 'toggleDevTools' as const }] : []),
                 { type: 'separator' },
                 { role: 'togglefullscreen' },
-                {
-                    label: 'Toggle Sidebar',
-                    accelerator: 'CmdOrCtrl+B',
-                    click: () => sendRenderer('sidebar-toggle'),
-                },
                 { type: 'separator' },
                 {
                     label: 'Open Settings Page',

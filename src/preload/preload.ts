@@ -70,6 +70,16 @@ ipcRenderer.on('sidebar-collapse-changed', (_event, data) => {
 contextBridge.exposeInMainWorld('ecaDesktop', {
     // ── Server message transport ──
     send: (message: unknown) => {
+        // Defense-in-depth: the renderer is expected to pass a tagged
+        // envelope `{ type: string, ... }` through this channel. Reject
+        // anything without a string `type` so a compromised/buggy script
+        // cannot forward arbitrary blobs to the main process. The main
+        // router does its own shape validation; this is a belt-and-braces
+        // guard at the IPC boundary.
+        const type = (message as { type?: unknown } | null | undefined)?.type;
+        if (typeof type !== 'string') {
+            throw new Error('ecaDesktop.send: message.type must be a string');
+        }
         ipcRenderer.send('webview-message', message);
     },
     onMessage: (callback: MessageCallback) => {

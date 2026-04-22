@@ -105,5 +105,35 @@ export const ISSUES_URL = 'https://github.com/editor-code-assistant/eca-desktop/
 
 export const HTTP_TIMEOUT_MS = 30_000;
 export const DOWNLOAD_TIMEOUT_MS = 300_000; // 5 minutes for large binaries
-export const DOWNLOAD_MAX_RETRIES = 1;
+// Retry up to 3 times (so a total of 4 attempts) with exponential backoff.
+// Pre-launch we were only retrying once which meant a single transient GitHub
+// hiccup dead-ended the first-run download — see audit finding S2.
+export const DOWNLOAD_MAX_RETRIES = 3;
 export const DOWNLOAD_RETRY_DELAY_MS = 2_000;
+// Exponential backoff factor used by downloadFile: delay = base * factor^attempt.
+export const DOWNLOAD_RETRY_BACKOFF_FACTOR = 2;
+
+// ── Server lifecycle ──
+
+// Hard deadline for the `initialize` JSON-RPC round-trip. If the spawned
+// server never replies (e.g. it crashed on startup but its stderr was
+// swallowed, or it wrote garbage to stdout that vscode-jsonrpc is still
+// trying to parse), we fail the session instead of hanging forever.
+export const SERVER_INIT_TIMEOUT_MS = 30_000;
+
+// Grace window after SIGTERM before escalating to SIGKILL. Gives the
+// server a chance to flush logs and persist state, but bounded so a
+// wedged server can't block app quit indefinitely.
+export const SERVER_STOP_GRACE_MS = 3_000;
+
+// Auto-restart policy: up to N attempts with exponential backoff.
+// After exhausting retries the session flips to Failed and stays there
+// until the user manually restarts.
+export const SERVER_RESTART_MAX_ATTEMPTS = 3;
+export const SERVER_RESTART_BASE_DELAY_MS = 1_000;
+
+// Minimum ECA server version this client is known to work against.
+// Bumped manually as the protocol evolves; a mismatch only produces a
+// warning log today (not a hard failure) so users with older servers
+// can still launch.
+export const MIN_SERVER_VERSION = '0.0.0';

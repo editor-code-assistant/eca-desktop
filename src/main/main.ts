@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import path from 'path';
 import * as fs from 'fs';
-import { pathToFileURL } from 'url';
+import { pathToFileURL, fileURLToPath } from 'url';
 import { createBridge } from './bridge';
 import { getLogStore } from './log-store';
 import { createMenu } from './menu';
@@ -12,9 +12,25 @@ import type { Preferences} from './preferences-store';
 import { PreferencesStore, isValidTheme } from './preferences-store';
 import { getPreferencesWindow } from './preferences-window';
 import type { WorkspaceFolder } from './protocol';
+import { sanitizeExternalUrl } from './security/url-allowlist';
 
-const IS_DEV = process.env.NODE_ENV === 'development';
+// Canonical Electron idiom: `app.isPackaged` is true only in production
+// builds (electron-builder output). Switching from `NODE_ENV==='development'`
+// fixes the dev-mode regression where the `"dev"` npm script never exports
+// NODE_ENV and thus lost dev-only affordances (DevTools menu, etc.).
+// See code-review M-1.
+const IS_DEV = !app.isPackaged;
 const WEBVIEW_DEV_URL = 'http://localhost:5173';
+
+// Whether to load the webview from a live Vite dev server (`vite dev`,
+// default port 5173) instead of the on-disk `file://` build. Opt-in via
+// `ECA_DEV_SERVER=1` because the stock `npm run dev` flow uses
+// `vite build --watch` (writes to disk + our fs.watch reloads the window)
+// — no HTTP server is running on 5173, so loading the URL would error
+// with ERR_CONNECTION_REFUSED. Users who want true HMR can run
+// `cd eca-webview && npx vite` in a second terminal and start the app
+// with `ECA_DEV_SERVER=1 npm run dev`.
+const USE_DEV_SERVER = IS_DEV && process.env.ECA_DEV_SERVER === '1';
 
 // Set the application name explicitly so macOS shows "ECA" in the menu bar,
 // dock, and About dialog instead of the default "Electron" during development.
@@ -61,20 +77,59 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // Sandbox the renderer: any compromise in the webview bundle can
+      // no longer access full Node via the preload context. See audit
+      // finding C1. Preload uses only contextBridge + ipcRenderer, both
+      // of which remain available under sandbox.
+      sandbox: true,
+      // Asserted explicitly instead of relying on the Electron 33
+      // default (defensive against future default changes).
+      webSecurity: true,
     },
   });
 
-  if (IS_DEV) {
+  if (USE_DEV_SERVER) {
     mainWindow.loadURL(WEBVIEW_DEV_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../src/renderer/index.html'));
   }
 
-  // Open external links in the default browser
+  // Open external links in the default browser — but only allowlisted
+  // schemes (http/https/mailto). Without this filter the webview could
+  // trigger shell.openExternal against javascript:, file:, vscode: or
+  // arbitrary custom URL handlers. See audit finding C3.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    const safe = sanitizeExternalUrl(url);
+    if (safe) {
+      shell.openExternal(safe).catch((err) => {
+        console.warn('[Main] shell.openExternal failed:', err);
+      });
+    } else {
+      console.warn('[Main] Blocked window-open with disallowed URL:', url);
+    }
     return { action: 'deny' };
+  });
+
+  // Block all in-window navigation away from the app origin. Combined
+  // with the window-open allowlist above this covers both `target=_blank`
+  // (setWindowOpenHandler) and link clicks / location.href assignments
+  // (will-navigate). Audit finding H1.
+  const allowedOrigins = new Set<string>();
+  if (USE_DEV_SERVER) allowedOrigins.add(new URL(WEBVIEW_DEV_URL).origin);
+  // Production uses file:// — navigations within file:// are usually
+  // harmless but we still deny hop-off to other origins.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    try {
+      const target = new URL(url);
+      const isFileProto = target.protocol === 'file:';
+      const isAllowedOrigin = allowedOrigins.has(target.origin);
+      if (!isFileProto && !isAllowedOrigin) {
+        event.preventDefault();
+        console.warn('[Main] Blocked will-navigate to:', url);
+      }
+    } catch {
+      event.preventDefault();
+    }
   });
 
   return mainWindow;
@@ -82,6 +137,48 @@ function createWindow(): BrowserWindow {
 
 async function main(): Promise<void> {
   await app.whenReady();
+
+  // Deny every permission request by default (notifications, media,
+  // geolocation, etc.). The ECA desktop app has no legitimate need for
+  // any of these; silently-granted permissions are a common Electron
+  // foot-gun. Audit finding H2.
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
+  // Inject a Content-Security-Policy header for loaded resources — the
+  // <meta> tag in index.html doesn't apply to the dev Vite URL, and
+  // header-level CSP is harder to bypass via content injection. Keeping
+  // 'unsafe-inline' on style-src is intentional (React inline styles);
+  // script-src is locked to 'self'. Audit finding C2.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const url = details.url;
+    // Only intercept our own resources. External origins (docs, provider
+    // login flows) are opened in the OS browser via shell.openExternal.
+    // Keep the match tight to avoid injecting our CSP onto unrelated
+    // localhost services the user may have running. See code-review M-3.
+    // The dev-server branch is only active when the user explicitly
+    // opts in via ECA_DEV_SERVER=1 (see top of file).
+    const shouldInject =
+      url.startsWith('file://')
+      || (USE_DEV_SERVER && url.startsWith(WEBVIEW_DEV_URL));
+    if (!shouldInject) return callback({});
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; "
+          + "script-src 'self'; "
+          + "style-src 'self' 'unsafe-inline'; "
+          + "img-src 'self' data: blob:; "
+          + "font-src 'self' data:; "
+          + "connect-src 'self' ws://localhost:* http://localhost:*; "
+          + "object-src 'none'; "
+          + "base-uri 'self';",
+        ],
+      },
+    });
+  });
 
   // On macOS, the dock icon in dev mode defaults to the Electron logo.
   // Explicitly set it to the ECA icon so it matches production builds.
@@ -203,9 +300,13 @@ async function main(): Promise<void> {
     let folderPath: string | undefined;
 
     if (data?.uri) {
-      // Direct URI provided (from recent workspaces)
+      // Direct URI provided (from recent workspaces). Use fileURLToPath
+      // so paths with spaces / unicode decode correctly — `new URL(uri).pathname`
+      // leaves percent-encoded bytes in place which breaks fs operations on
+      // e.g. `/home/user/My Code` → `/home/user/My%20Code`. Audit finding
+      // "new URL(uri).pathname is percent-encoded".
       try {
-        folderPath = new URL(data.uri).pathname;
+        folderPath = fileURLToPath(data.uri);
       } catch {
         folderPath = data.uri;
       }
@@ -313,11 +414,11 @@ async function main(): Promise<void> {
     bridge.sendSessionListUpdate();
   });
 
-  ipcMain.on('session-remove', (_event, data: { sessionId: string }) => {
+  ipcMain.on('session-remove', async (_event, data: { sessionId: string }) => {
     // Notify renderer to clear each chat in this session before destroying it
-    const session = sessionManager.getSession(data.sessionId);
-    if (session) {
-      const { entries } = session.chatState.getChatListUpdate();
+    const existing = sessionManager.getSession(data.sessionId);
+    if (existing) {
+      const { entries } = existing.chatState.getChatListUpdate();
       for (const entry of entries) {
         mainWindow.webContents.send('server-message', {
           type: 'chat/deleted',
@@ -326,7 +427,10 @@ async function main(): Promise<void> {
       }
     }
 
-    sessionManager.removeSession(data.sessionId);
+    // `removeSession` now awaits the server's graceful stop (with SIGKILL
+    // escalation). Awaiting here keeps the UI update in-order so the
+    // sidebar never flashes a half-stopped session.
+    await sessionManager.removeSession(data.sessionId);
     bridge.sendSessionListUpdate();
     bridge.sendChatListUpdate();
   });
@@ -347,10 +451,18 @@ async function main(): Promise<void> {
     setupAutoUpdater(mainWindow);
   }
 
-  // Dev mode: watch renderer + webview dist files and auto-reload the window
+  // Dev mode: watch renderer + webview dist files and auto-reload the window.
+  //
+  // NB: `fs.watch(dir, { recursive: true })` is not supported on Linux and
+  // throws `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` on recent Node versions,
+  // so the original implementation broke live-reload for Linux developers.
+  // We now walk the renderer directory and watch each subdirectory
+  // individually, which works uniformly across macOS / Linux / Windows
+  // without adding a chokidar dependency to the runtime bundle.
   if (!app.isPackaged) {
     const fs = require('fs');
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const activeWatchers: Array<ReturnType<typeof fs.watch>> = [];
 
     const scheduleReload = (source: string, filename: string) => {
       if (reloadTimer) clearTimeout(reloadTimer);
@@ -362,30 +474,80 @@ async function main(): Promise<void> {
       }, 500);
     };
 
-    // Watch renderer files (sidebar, welcome, theme, index.html)
-    const rendererDir = path.join(__dirname, '../src/renderer');
-    fs.watch(rendererDir, { recursive: true }, (_event: string, filename: string) => {
-      if (!filename) return;
-      scheduleReload('Renderer', filename);
-    });
+    const watchDirNonRecursive = (dir: string, source: string, filter?: (f: string) => boolean): void => {
+      try {
+        const watcher = fs.watch(dir, (_event: string, filename: string | null) => {
+          if (!filename) return;
+          if (filter && !filter(filename)) return;
+          scheduleReload(source, filename);
+        });
+        activeWatchers.push(watcher);
+      } catch (err) {
+        console.warn(`[Dev] Could not watch ${dir}:`, err);
+      }
+    };
 
-    // Watch webview dist (vite build --watch output)
+    const walkAndWatch = (root: string, source: string, filter?: (f: string) => boolean): void => {
+      const visit = (dir: string): void => {
+        watchDirNonRecursive(dir, source, filter);
+        let entries: fs.Dirent[] = [];
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch { return; }
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+            visit(path.join(dir, entry.name));
+          }
+        }
+      };
+      visit(root);
+    };
+
+    // Watch renderer files (sidebar, welcome, theme, index.html, bootstraps).
+    const rendererDir = path.join(__dirname, '../src/renderer');
+    walkAndWatch(rendererDir, 'Renderer');
+
+    // Watch webview dist (vite build --watch output) — non-recursive is fine,
+    // vite writes everything to a single `assets/` directory.
     const webviewDistDir = path.join(__dirname, '../eca-webview/dist/assets');
-    fs.watch(webviewDistDir, (_event: string, filename: string) => {
-      if (!filename) return;
-      // Only reload on JS/CSS changes, not intermediate files
-      if (filename.endsWith('.js') || filename.endsWith('.css')) {
-        scheduleReload('Webview', filename);
+    watchDirNonRecursive(webviewDistDir, 'Webview', (f) => f.endsWith('.js') || f.endsWith('.css'));
+
+    // Tear down on window close so we don't leak watchers when the
+    // window is recreated via `activate`.
+    app.on('before-quit', () => {
+      for (const w of activeWatchers) {
+        try { w.close(); } catch { /* noop */ }
       }
     });
 
     console.log('[Dev] Watching renderer + webview files for live reload');
   }
 
-  app.on('before-quit', async () => {
-    for (const session of sessionManager.getAllSessions()) {
-      await session.ecaServer.stop();
-    }
+  // Graceful shutdown of every ECA server before the app exits.
+  //
+  // Electron's `before-quit` is synchronous from the event loop's
+  // perspective: an unawaited async handler lets the process exit while
+  // JSON-RPC `shutdown`/`exit` is still in flight, leaving the spawned
+  // `eca` child as an orphan. We `event.preventDefault()`, await every
+  // session's stop() (with its own SIGKILL escalation), and only then
+  // call `app.exit()` to actually terminate. See audit finding S4.
+  let quittingCleanly = false;
+  app.on('before-quit', (event) => {
+    if (quittingCleanly) return; // allow the final app.exit() to proceed
+    event.preventDefault();
+    quittingCleanly = true;
+    const OVERALL_QUIT_DEADLINE_MS = 8_000;
+    const stops = sessionManager.getAllSessions().map(
+      (s) => s.ecaServer.stop().catch((err) => {
+        console.error('[Main] Error stopping session on quit:', err);
+      }),
+    );
+    const deadline = new Promise<void>((resolve) =>
+      setTimeout(resolve, OVERALL_QUIT_DEADLINE_MS),
+    );
+    Promise.race([Promise.all(stops).then(() => undefined), deadline]).then(() => {
+      app.exit(0);
+    });
   });
 }
 

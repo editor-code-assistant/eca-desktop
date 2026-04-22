@@ -2,10 +2,12 @@
 // Preferences window — dedicated BrowserWindow for user prefs
 // ============================================================
 
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'path';
 
-const IS_DEV = process.env.NODE_ENV === 'development';
+// See src/main/menu.ts and code-review M-1 — switched from NODE_ENV to
+// `app.isPackaged` so `npm run dev` reliably opens DevTools on this window.
+const IS_DEV = !app.isPackaged;
 
 let prefsWindow: BrowserWindow | null = null;
 
@@ -38,7 +40,8 @@ export function openPreferencesWindow(parent?: BrowserWindow): BrowserWindow {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false,
+            sandbox: true,
+            webSecurity: true,
         },
     });
 

@@ -2,7 +2,7 @@
 // Bridge — thin orchestrator wiring IPC, router, and chat state
 // ============================================================
 
-import type { BrowserWindow} from 'electron';
+import type { BrowserWindow, IpcMainEvent} from 'electron';
 import { ipcMain, shell } from 'electron';
 import { EcaServerStatus } from './server';
 import type { ChatState} from './chat-state';
@@ -14,15 +14,54 @@ import type { IpcMessage, ToolServerUpdatedParams, ChatEntry, AskQuestionResult 
 import * as rpc from './rpc';
 import type { SessionManager, Session } from './session-manager';
 
-// Track MCP server, config and providers state per session
+// Track MCP server, config and providers state per session. Cleaned up
+// in `dropSessionCaches` when a session is removed, so long-running
+// users aren't bleeding one entry per closed workspace forever.
 const mcpServers = new Map<string, Record<string, ToolServerUpdatedParams>>();
 const configCache = new Map<string, unknown>();
 const providersCache = new Map<string, unknown>();
+
+export function dropSessionCaches(sessionId: string): void {
+    mcpServers.delete(sessionId);
+    configCache.delete(sessionId);
+    providersCache.delete(sessionId);
+}
+
+/**
+ * Verify an incoming IPC message originated from the main window's
+ * `webContents`. This is a WebContents-level check — it compares
+ * `event.sender.id` against `mainWindow.webContents.id`, so any frame
+ * (top or sub) hosted by the main window will pass. In the current
+ * architecture no sub-frames are ever loaded, and the combination of
+ * `sandbox: true` + `contextIsolation: true` + `webSecurity: true` +
+ * our strict CSP means a rogue cross-origin iframe could not inherit
+ * the preload API even if one were injected. So this is a pragmatic
+ * first line of defense, not a top-frame guarantee.
+ *
+ * TODO(post-launch): strengthen to
+ *   `event.senderFrame === event.sender.mainFrame`
+ * once we've verified Electron 33+ `WebFrameMain` semantics. See the
+ * code-review H-2 finding for the rationale.
+ */
+function isTrustedSender(event: IpcMainEvent, mainWindow: BrowserWindow): boolean {
+    if (mainWindow.isDestroyed()) return false;
+    const senderId = event.sender.id;
+    const mainId = mainWindow.webContents.id;
+    return senderId === mainId;
+}
 
 export function createBridge(
     mainWindow: BrowserWindow,
     sessionManager: SessionManager,
 ) {
+    // Evict session-scoped caches when a session is torn down. Without
+    // this, long-running users bleed one { mcpServers, configCache,
+    // providersCache } entry per closed workspace forever. See audit
+    // finding "bridge module-level Maps never evicted".
+    sessionManager.on('session-removed', (sessionId: string) => {
+        dropSessionCaches(sessionId);
+    });
+
     // ── Pending askQuestion requests ──
 
     let nextAskQuestionId = 1;
@@ -315,7 +354,22 @@ export function createBridge(
 
     // ── Renderer → Server (IPC dispatch) ──
 
-    ipcMain.on('webview-message', async (_event, message: IpcMessage) => {
+    ipcMain.on('webview-message', async (event, message: IpcMessage) => {
+        // Defense-in-depth: only accept webview-message IPC from our own
+        // main window's webContents. Blocks any loaded frame / popup /
+        // iframe from impersonating the webview.
+        if (!isTrustedSender(event, mainWindow)) {
+            console.warn('[Bridge] Rejected webview-message from untrusted sender:', event.sender.id);
+            return;
+        }
+
+        // Validate payload shape — avoid crashing on malformed IPC that
+        // slipped past the preload contract.
+        if (!message || typeof message !== 'object' || typeof message.type !== 'string') {
+            console.warn('[Bridge] Rejected malformed webview-message payload');
+            return;
+        }
+
         // ── Logs (handled locally, no server connection required) ──
         //
         // These live before the session/conn check so the Logs tab stays

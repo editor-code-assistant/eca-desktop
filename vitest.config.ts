@@ -8,6 +8,11 @@ export default defineConfig({
             provider: 'v8',
             include: ['src/main/**/*.ts'],
             exclude: ['src/main/main.ts'],
+            thresholds: {
+                // Non-blocking initial thresholds; raise over time as coverage grows.
+                lines: 50,
+                branches: 40,
+            },
         },
     },
 });
