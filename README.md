@@ -10,6 +10,8 @@
 ECA (Editor Code Assistant) Desktop is an AI-powered pair-programming client that runs as a standalone desktop app — no editor required.
 It connects to an external `eca` server process to provide interactive chat, code suggestions, context management and more.
 
+The rationale came from being able to offer all ECA server capabilities that are a lot in an easy way without requiring an editor, since most logic lives in ECA server, ECA Desktop is a thin wrapper layer re-using [eca-webview](https://github.com/editor-code-assistant/eca-webview).
+
 For more details about ECA, features and configuration, check [ECA server](https://github.com/editor-code-assistant/eca).
 
 This app will auto download `eca` and manage the process.
