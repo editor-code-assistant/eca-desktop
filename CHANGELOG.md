@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3]
+
 ### Fixed
 
 - Chat trust indicator stays in sync with the server's persisted per-chat trust
