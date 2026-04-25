@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Chat trust indicator stays in sync with the server's persisted per-chat trust
+  state on resume by bumping `eca-webview` to honor `selectTrust` on
+  `config/updated` (eca #426).
+
 ## [0.6.0]
 
 ### Added
