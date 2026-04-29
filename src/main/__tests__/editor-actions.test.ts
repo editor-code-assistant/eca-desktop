@@ -60,11 +60,11 @@ describe('getGlobalConfigPath', () => {
         expect(getGlobalConfigPath()).toBe(path.join('/some/xdg', 'eca', 'config.json'));
     });
 
-    it('uses macOS default on darwin when no env override', async () => {
+    it('uses ~/.config/eca/config.json on darwin when no env override', async () => {
         Object.defineProperty(process, 'platform', { value: 'darwin' });
         const { getGlobalConfigPath } = await loadConstants();
         expect(getGlobalConfigPath()).toBe(
-            path.join(os.homedir(), 'Library', 'Application Support', 'eca', 'config.json'),
+            path.join(os.homedir(), '.config', 'eca', 'config.json'),
         );
     });
 
