@@ -71,6 +71,24 @@ npm run dev
 
 This starts the [eca-webview](https://github.com/editor-code-assistant/eca-webview) Vite dev server on `http://localhost:5173` and launches Electron pointing to it, so any changes will be updated on the desktop app live.
 
+#### Reusing a running webview across clients
+
+If you already have an `eca-webview` Vite dev server running (for example one started by `eca-vscode` or `eca-intellij`), you can boot only the desktop side and have it connect to that same webview:
+
+```bash
+# Terminal A — the webview only (or already running from another client)
+npm run dev:webview
+
+# Terminal B — the desktop only, connects to http://localhost:5173 by default
+npm run dev:app
+```
+
+Override the URL with the `ECA_WEBVIEW_URL` env var to point at a non-default host/port:
+
+```bash
+ECA_WEBVIEW_URL=http://localhost:6000 npm run dev:app
+```
+
 ### Package
 
 ```bash

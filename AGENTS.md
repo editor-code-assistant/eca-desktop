@@ -1,2 +1,4 @@
-- `npm run dev` starts the project listening to changes
+- `npm run dev` starts the eca-webview Vite dev server **and** the desktop app (one-shot, all-in-one)
+- `npm run dev:webview` starts only the eca-webview Vite dev server (defaults to `http://localhost:5173`)
+- `npm run dev:app` starts only the desktop and connects to a running eca-webview at `http://localhost:5173`. Override the URL with `ECA_WEBVIEW_URL=http://localhost:6000 npm run dev:app` to share a single webview across multiple ECA clients (desktop + vscode + intellij).
 - `npm version <patch|minor|major>` to tag for a new release

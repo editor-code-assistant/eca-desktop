@@ -9,6 +9,19 @@ import type { Preferences } from '../main/preferences-store';
 type MessageCallback = (message: unknown) => void;
 type VoidCallback = () => void;
 
+// Read dev-mode flags forwarded by the main process via
+// `webPreferences.additionalArguments` (see createWindow in main.ts).
+// These let the renderer (specifically `index-bootstrap.ts`) decide
+// whether to source the React bundle from the Vite dev server (HMR)
+// or the local `eca-webview/dist` build.
+function readArg(name: string): string | undefined {
+  const prefix = `--${name}=`;
+  const arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : undefined;
+}
+const isDev = readArg('eca-is-dev') === '1';
+const webviewDevUrl = readArg('eca-webview-url') ?? 'http://localhost:5173';
+
 // Server message listeners
 const listeners: MessageCallback[] = [];
 ipcRenderer.on('server-message', (_event, message) => {
@@ -92,6 +105,12 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
         }
     },
     platform: process.platform,
+
+    // ── Dev-mode metadata (forwarded from main via additionalArguments) ──
+    // Consumed by `src/renderer/index-bootstrap.ts` to decide where to
+    // source the React bundle (Vite dev URL vs local dist).
+    isDev,
+    webviewDevUrl,
 
     // ── Sidebar: chat list ──
     onChatListUpdate: (callback: MessageCallback) => {

@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self';">
+    <!-- CSP is enforced by the response header injected from main.ts
+         (session.defaultSession.webRequest.onHeadersReceived) — branched
+         on dev vs. production. Static <meta> CSP was removed because it
+         must be permissive enough to allow Vite's dev server in dev,
+         which would weaken production defense-in-depth here while the
+         header CSP already enforces the strict prod policy. -->
     <title>ECA Desktop</title>
     <link href="./theme.css" rel="stylesheet">
     <link href="./sidebar.css" rel="stylesheet">
     <link href="./welcome.css" rel="stylesheet">
-    <link href="../../eca-webview/dist/assets/index.css" rel="stylesheet">
     <style>
         /* macOS-only titlebar drag region.
          *
@@ -98,7 +102,8 @@
     <!-- Sidebar logic (must run after ecaDesktop is available) -->
     <script src="./sidebar.js"></script>
 
-    <!-- eca-webview app -->
-    <script type="module" src="../../eca-webview/dist/assets/index.js"></script>
+    <!-- eca-webview app: <script>/<link> are injected dynamically by
+         index-bootstrap.ts above — either from the Vite dev server
+         (dev) or from `../../eca-webview/dist/assets/...` (prod). -->
 </body>
 </html>

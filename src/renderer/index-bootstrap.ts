@@ -35,6 +35,8 @@ interface EcaDesktopTransportBridge {
     send: (message: WebviewMessage) => void;
     onMessage: (callback: (message: WebviewMessage) => void) => void;
     platform?: string;
+    isDev?: boolean;
+    webviewDevUrl?: string;
 }
 
 interface WebTransport {
@@ -77,4 +79,55 @@ if (win.ecaDesktop) {
     win.ecaDesktop.onMessage(function (message) {
         win.postMessage(message, '*');
     });
+}
+
+// ── Load the React bundle (eca-webview) ──
+//
+// In dev mode (`npm run dev` or `npm run dev:app`) we load it from the
+// Vite dev server so a single webview can be shared with eca-vscode and
+// eca-intellij during development. In production we load the bundled
+// artifact from the in-repo `eca-webview/dist`.
+//
+// This used to be a static `<script>` tag in index.html — moved here so
+// the URL can be chosen at runtime based on flags forwarded from main.
+const isDev = win.ecaDesktop?.isDev === true;
+const webviewBaseUrl = win.ecaDesktop?.webviewDevUrl ?? 'http://localhost:5173';
+
+if (isDev) {
+    // React Refresh preamble — required by `@vitejs/plugin-react`.
+    // Without this the React plugin throws "can't detect preamble" and
+    // the app fails to mount. Mirrors the inline preamble eca-vscode
+    // injects in `getWebviewContent` (see eca-vscode/src/webview.ts).
+    const preamble = document.createElement('script');
+    preamble.type = 'module';
+    preamble.textContent =
+        `import RefreshRuntime from "${webviewBaseUrl}/@react-refresh";\n`
+        + `RefreshRuntime.injectIntoGlobalHook(window);\n`
+        + `window.$RefreshReg$ = () => {};\n`
+        + `window.$RefreshSig$ = () => (type) => type;\n`
+        + `window.__vite_plugin_react_preamble_installed__ = true;\n`;
+    document.head.appendChild(preamble);
+
+    // Stylesheet (Vite serves `/src/index.css` as a regular CSS file in dev).
+    const styleLink = document.createElement('link');
+    styleLink.rel = 'stylesheet';
+    styleLink.href = `${webviewBaseUrl}/src/index.css`;
+    document.head.appendChild(styleLink);
+
+    // Main React entrypoint.
+    const mainScript = document.createElement('script');
+    mainScript.type = 'module';
+    mainScript.src = `${webviewBaseUrl}/src/main.tsx`;
+    document.body.appendChild(mainScript);
+} else {
+    // Production: load the pre-built artifacts from the in-repo dist.
+    const styleLink = document.createElement('link');
+    styleLink.rel = 'stylesheet';
+    styleLink.href = '../../eca-webview/dist/assets/index.css';
+    document.head.appendChild(styleLink);
+
+    const mainScript = document.createElement('script');
+    mainScript.type = 'module';
+    mainScript.src = '../../eca-webview/dist/assets/index.js';
+    document.body.appendChild(mainScript);
 }

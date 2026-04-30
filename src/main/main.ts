@@ -20,17 +20,15 @@ import { sanitizeExternalUrl } from './security/url-allowlist';
 // NODE_ENV and thus lost dev-only affordances (DevTools menu, etc.).
 // See code-review M-1.
 const IS_DEV = !app.isPackaged;
-const WEBVIEW_DEV_URL = 'http://localhost:5173';
 
-// Whether to load the webview from a live Vite dev server (`vite dev`,
-// default port 5173) instead of the on-disk `file://` build. Opt-in via
-// `ECA_DEV_SERVER=1` because the stock `npm run dev` flow uses
-// `vite build --watch` (writes to disk + our fs.watch reloads the window)
-// — no HTTP server is running on 5173, so loading the URL would error
-// with ERR_CONNECTION_REFUSED. Users who want true HMR can run
-// `cd eca-webview && npx vite` in a second terminal and start the app
-// with `ECA_DEV_SERVER=1 npm run dev`.
-const USE_DEV_SERVER = IS_DEV && process.env.ECA_DEV_SERVER === '1';
+// In dev mode the webview is served by a live Vite dev server (default
+// `http://localhost:5173`). The URL is env-overridable so a single
+// running webview can be shared across multiple ECA clients (desktop +
+// vscode + intellij) — start the desktop alone via `npm run dev:app`
+// and point it elsewhere with e.g. `ECA_WEBVIEW_URL=http://localhost:6000`.
+// In production (`app.isPackaged`) the bundled `file://` build is used
+// instead and this constant is ignored.
+const WEBVIEW_DEV_URL = process.env.ECA_WEBVIEW_URL ?? 'http://localhost:5173';
 
 // Set the application name explicitly so macOS shows "ECA" in the menu bar,
 // dock, and About dialog instead of the default "Electron" during development.
@@ -85,14 +83,25 @@ function createWindow(): BrowserWindow {
       // Asserted explicitly instead of relying on the Electron 33
       // default (defensive against future default changes).
       webSecurity: true,
+      // Forward the dev-mode flag and the webview URL to the renderer
+      // via process.argv so `index-bootstrap.ts` can decide whether to
+      // load the React bundle from the Vite dev server (HMR) or the
+      // local `eca-webview/dist` build (production / one-shot dev).
+      // The preload reads them and re-exposes via contextBridge.
+      additionalArguments: [
+        `--eca-is-dev=${IS_DEV ? '1' : '0'}`,
+        `--eca-webview-url=${WEBVIEW_DEV_URL}`,
+      ],
     },
   });
 
-  if (USE_DEV_SERVER) {
-    mainWindow.loadURL(WEBVIEW_DEV_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../src/renderer/index.html'));
-  }
+  // Always load the desktop shell (sidebar, welcome screen, traffic-light
+  // titlebar) via file://. The React bundle from eca-webview is sourced
+  // dynamically by `index-bootstrap.ts` — from the Vite dev server in dev
+  // mode, or from the local `eca-webview/dist` build in production. This
+  // lets `npm run dev:app` connect to a webview running elsewhere (shared
+  // with eca-vscode / eca-intellij), mirroring those clients' patterns.
+  mainWindow.loadFile(path.join(__dirname, '../src/renderer/index.html'));
 
   // Open external links in the default browser — but only allowlisted
   // schemes (http/https/mailto). Without this filter the webview could
@@ -115,7 +124,7 @@ function createWindow(): BrowserWindow {
   // (setWindowOpenHandler) and link clicks / location.href assignments
   // (will-navigate). Audit finding H1.
   const allowedOrigins = new Set<string>();
-  if (USE_DEV_SERVER) allowedOrigins.add(new URL(WEBVIEW_DEV_URL).origin);
+  if (IS_DEV) allowedOrigins.add(new URL(WEBVIEW_DEV_URL).origin);
   // Production uses file:// — navigations within file:// are usually
   // harmless but we still deny hop-off to other origins.
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -153,29 +162,38 @@ async function main(): Promise<void> {
   // script-src is locked to 'self'. Audit finding C2.
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const url = details.url;
-    // Only intercept our own resources. External origins (docs, provider
-    // login flows) are opened in the OS browser via shell.openExternal.
-    // Keep the match tight to avoid injecting our CSP onto unrelated
-    // localhost services the user may have running. See code-review M-3.
-    // The dev-server branch is only active when the user explicitly
-    // opts in via ECA_DEV_SERVER=1 (see top of file).
-    const shouldInject =
-      url.startsWith('file://')
-      || (USE_DEV_SERVER && url.startsWith(WEBVIEW_DEV_URL));
-    if (!shouldInject) return callback({});
+    // The desktop shell is always loaded via file:// (see createWindow).
+    // Only inject CSP on those responses; external origins (docs, login
+    // flows) are opened in the OS browser via shell.openExternal. Keep
+    // the match tight to avoid injecting CSP onto unrelated localhost
+    // services the user may have running. See code-review M-3.
+    if (!url.startsWith('file://')) return callback({});
+    // In dev mode the file:// shell loads the React bundle (and React
+    // Refresh preamble) cross-origin from the Vite dev server. That
+    // requires script-src/style-src/img-src/font-src to allow
+    // http://localhost:*, plus 'unsafe-inline' + 'unsafe-eval' for
+    // Vite's preamble + HMR module wrapping. Production stays strict.
+    const csp = IS_DEV
+      ? "default-src 'self' http://localhost:*; "
+        + "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*; "
+        + "style-src 'self' 'unsafe-inline' http://localhost:*; "
+        + "img-src 'self' data: blob: http://localhost:*; "
+        + "font-src 'self' data: http://localhost:*; "
+        + "connect-src 'self' ws://localhost:* http://localhost:*; "
+        + "object-src 'none'; "
+        + "base-uri 'self';"
+      : "default-src 'self'; "
+        + "script-src 'self'; "
+        + "style-src 'self' 'unsafe-inline'; "
+        + "img-src 'self' data: blob:; "
+        + "font-src 'self' data:; "
+        + "connect-src 'self'; "
+        + "object-src 'none'; "
+        + "base-uri 'self';";
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; "
-          + "script-src 'self'; "
-          + "style-src 'self' 'unsafe-inline'; "
-          + "img-src 'self' data: blob:; "
-          + "font-src 'self' data:; "
-          + "connect-src 'self' ws://localhost:* http://localhost:*; "
-          + "object-src 'none'; "
-          + "base-uri 'self';",
-        ],
+        'Content-Security-Policy': [csp],
       },
     });
   });
