@@ -1,14 +1,25 @@
 /* ECA Desktop themes — defines --eca-* CSS variables for the webview.
  *
  * The eca-webview has theme rulesets for "vscode" and "intellij" editors
- * but none for "web". Since eca-desktop sets editor = "web", we must
- * provide all --eca-* variables here.
+ * but none for "desktop" (the value its bootstrap sets for the eca-desktop
+ * host, see eca-webview's `data-editor` attribute on <html>). We must
+ * therefore provide all --eca-* variables here, scoped to the same
+ * "desktop" attribute the webview ends up with after it boots.
+ *
+ * Historical note: pre-0.6.4 the value was "web". Commit b44ce16
+ * ("Update eca-webview: announce as desktop for prompt-area styling")
+ * flipped it so eca-webview can paint a host-specific modal-card prompt
+ * border via `[data-editor="desktop"]`. If those selectors below still
+ * said "web", the webview would override our value to "desktop" on mount
+ * and every variable would silently become unset — which manifests as
+ * black text on a white background since `body { color: var(--eca-editor-fg) }`
+ * has no fallback.
  *
  * Default palette: "Carbon" (dark) — pure neutral gray base with ECA
  * teal accent. A light override follows, keyed on [data-theme="light"];
  * the renderer's theme-bootstrap applies the attribute on <html>.
  */
-html[data-editor="web"] {
+html[data-editor="desktop"] {
   /* ── Core surfaces ── */
   --eca-editor-bg: #0c0c0c;
   --eca-editor-fg: #e0e4ea;
@@ -107,7 +118,7 @@ html[data-editor="web"] {
  * are inherited from the dark block — keep this list in sync when new
  * variables are added.
  * ═══════════════════════════════════════════════════ */
-html[data-editor="web"][data-theme="light"] {
+html[data-editor="desktop"][data-theme="light"] {
   /* ── Core surfaces ── */
   --eca-editor-bg: #ffffff;
   --eca-editor-fg: #1f2328;
@@ -200,24 +211,24 @@ html[data-editor="web"][data-theme="light"] {
 
 /* ── Always-on web overrides ── */
 /* Hide contexts file-picker (no desktop integration yet) */
-[data-editor="web"] .prompt-area .contexts {
+[data-editor="desktop"] .prompt-area .contexts {
   display: none;
 }
 
 /* ── Normal + Big: sidebar replaces chat header (≥768px) ── */
 @media (min-width: 768px) {
-  [data-editor="web"] .chat-header {
+  [data-editor="desktop"] .chat-header {
     display: none;
   }
 }
 
 /* ── Mobile (<768px): drawer sidebar, mobile title bar ── */
 @media (max-width: 767px) {
-  [data-editor="web"] .chat-header .chats,
-  [data-editor="web"] .chat-header .trust-toggle {
+  [data-editor="desktop"] .chat-header .chats,
+  [data-editor="desktop"] .chat-header .trust-toggle {
     display: none;
   }
-  [data-editor="web"] .chat-header .web-chat-title-bar {
+  [data-editor="desktop"] .chat-header .web-chat-title-bar {
     display: flex;
   }
 }
@@ -225,8 +236,8 @@ html[data-editor="web"][data-theme="light"] {
 /* ── Big mode (≥1100px): centered content, card-style prompt ── */
 @media (min-width: 1100px) {
   /* Constrain content width and center */
-  [data-editor="web"] .messages-container,
-  [data-editor="web"] .prompt-area {
+  [data-editor="desktop"] .messages-container,
+  [data-editor="desktop"] .prompt-area {
     max-width: 52em;
     margin-left: auto;
     margin-right: auto;
@@ -234,7 +245,7 @@ html[data-editor="web"][data-theme="light"] {
   }
 
   /* Card-style prompt: full border replaces webview's top-border-only */
-  [data-editor="web"] .prompt-area {
+  [data-editor="desktop"] .prompt-area {
     border: 1px solid var(--eca-base-border);
     border-radius: 8px;
     padding: 0.6em 1em;
@@ -246,15 +257,15 @@ html[data-editor="web"][data-theme="light"] {
      signals its state without pulling user attention. Ordered by
      priority (last wins when multiple apply):
      focused (teal) < running (yellow) < waiting-approval (orange) */
-  [data-editor="web"] .prompt-area.focused {
+  [data-editor="desktop"] .prompt-area.focused {
     border-color: color-mix(in srgb, var(--eca-link-fg) 35%, transparent);
     box-shadow: none;
   }
-  [data-editor="web"] .prompt-area.running {
+  [data-editor="desktop"] .prompt-area.running {
     border-color: color-mix(in srgb, var(--eca-warning-fg, #cca700) 35%, transparent);
     box-shadow: none;
   }
-  [data-editor="web"] .prompt-area.waiting-approval {
+  [data-editor="desktop"] .prompt-area.waiting-approval {
     border-color: color-mix(in srgb, var(--eca-approval-fg, #e8850c) 35%, transparent);
     box-shadow: none;
   }
@@ -263,13 +274,13 @@ html[data-editor="web"][data-theme="light"] {
      tied to --eca-link-fg (the same color as the border). A tight
      inner ring + a diffuse outer bloom makes the whole card look lit
      from the border, not framed by a hard line. */
-  [data-editor="web"] .prompt-area.hero.focused {
+  [data-editor="desktop"] .prompt-area.hero.focused {
     border-color: color-mix(in srgb, var(--eca-link-fg) 55%, transparent);
     box-shadow:
       0 0 0 3px color-mix(in srgb, var(--eca-link-fg) 14%, transparent),
       0 8px 32px color-mix(in srgb, var(--eca-link-fg) 18%, transparent);
   }
-  [data-editor="web"] .prompt-area .field {
+  [data-editor="desktop"] .prompt-area .field {
     background: transparent;
   }
 
@@ -280,7 +291,7 @@ html[data-editor="web"][data-theme="light"] {
      keep their left accent border and sit at the start of the column. */
 
   /* More vertical breathing room + tiny horizontal gutter */
-  [data-editor="web"] .messages-container {
+  [data-editor="desktop"] .messages-container {
     padding-inline: 0.25em;
     gap: 1em;
   }
@@ -291,7 +302,7 @@ html[data-editor="web"][data-theme="light"] {
        width: fit-content  → shrink to content
        max-width: 36em     → wrap past the reading cap
        margin-left: auto   → push to the right within the wrapper */
-  [data-editor="web"] .user-message-card {
+  [data-editor="desktop"] .user-message-card {
     width: fit-content;
     max-width: 36em;
     margin-left: auto;
@@ -302,14 +313,14 @@ html[data-editor="web"][data-theme="light"] {
     transition: max-width 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   /* Keep code inside the bubble contained */
-  [data-editor="web"] .user-message-card pre,
-  [data-editor="web"] .user-message-card .inline-code {
+  [data-editor="desktop"] .user-message-card pre,
+  [data-editor="desktop"] .user-message-card .inline-code {
     max-width: 100%;
     overflow-x: auto;
   }
 
   /* Assistant text — small gutter so it doesn't hug the column edge */
-  [data-editor="web"] .assistant-message {
+  [data-editor="desktop"] .assistant-message {
     padding-inline: 0.25em;
   }
 
@@ -328,12 +339,12 @@ html[data-editor="web"][data-theme="light"] {
        the outer border picks up the status color at low alpha so
        the whole perimeter reads as the state, not just the left.
      - AnimatePresence mounts/unmounts the body; no TSX change. */
-  [data-editor="web"] .tool-call-card,
-  [data-editor="web"] .reason-card,
-  [data-editor="web"] .collapsable,
-  [data-editor="web"] .subagent-card,
-  [data-editor="web"] .flag-banner,
-  [data-editor="web"] .chat-question {
+  [data-editor="desktop"] .tool-call-card,
+  [data-editor="desktop"] .reason-card,
+  [data-editor="desktop"] .collapsable,
+  [data-editor="desktop"] .subagent-card,
+  [data-editor="desktop"] .flag-banner,
+  [data-editor="desktop"] .chat-question {
     width: fit-content;
     min-width: 0;
     max-width: 44em;
@@ -350,10 +361,10 @@ html[data-editor="web"][data-theme="light"] {
   }
 
   /* Expanded — body mounted: extend to fill the column, add gentle lift */
-  [data-editor="web"] .tool-call-card:has(> .tool-call-card-body),
-  [data-editor="web"] .reason-card:has(> .reason-card-body),
-  [data-editor="web"] .subagent-card:has(> .subagent-card-body),
-  [data-editor="web"] .collapsable:has(> .content) {
+  [data-editor="desktop"] .tool-call-card:has(> .tool-call-card-body),
+  [data-editor="desktop"] .reason-card:has(> .reason-card-body),
+  [data-editor="desktop"] .subagent-card:has(> .subagent-card-body),
+  [data-editor="desktop"] .collapsable:has(> .content) {
     min-width: 100%;
     box-shadow: 0 2px 10px color-mix(in srgb, var(--eca-base-bg) 60%, transparent);
   }
@@ -362,19 +373,19 @@ html[data-editor="web"][data-theme="light"] {
      and subagent. Tool-call outer borders stay neutral grey so status
      is signaled purely by the 2px left accent from base SCSS — this
      matches the default grey look of reasoning cards. */
-  [data-editor="web"] .reason-card.active {
+  [data-editor="desktop"] .reason-card.active {
     border-top-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
     border-right-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
     border-bottom-color: color-mix(in srgb, var(--eca-accent-fg) 28%, var(--eca-base-border));
   }
-  [data-editor="web"] .subagent-card.failed,
-  [data-editor="web"] .subagent-card.rejected {
+  [data-editor="desktop"] .subagent-card.failed,
+  [data-editor="desktop"] .subagent-card.rejected {
     border-top-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
     border-right-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
     border-bottom-color: color-mix(in srgb, var(--eca-error-fg) 28%, var(--eca-base-border));
   }
   /* Subagent purple lives in an SCSS var; hardcode the hex here */
-  [data-editor="web"] .subagent-card.active {
+  [data-editor="desktop"] .subagent-card.active {
     border-top-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
     border-right-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
     border-bottom-color: color-mix(in srgb, #b180d7 28%, var(--eca-base-border));
@@ -385,42 +396,42 @@ html[data-editor="web"][data-theme="light"] {
      body mounts (`:has()` flips), the base shorthand above paints the
      soft grey outline back in, signaling "this is a card now". Flag
      and chat-question never expand, so they always match. */
-  [data-editor="web"] .tool-call-card:not(:has(> .tool-call-card-body)),
-  [data-editor="web"] .reason-card:not(:has(> .reason-card-body)),
-  [data-editor="web"] .subagent-card:not(:has(> .subagent-card-body)),
-  [data-editor="web"] .collapsable:not(:has(> .content)),
-  [data-editor="web"] .flag-banner,
-  [data-editor="web"] .chat-question {
+  [data-editor="desktop"] .tool-call-card:not(:has(> .tool-call-card-body)),
+  [data-editor="desktop"] .reason-card:not(:has(> .reason-card-body)),
+  [data-editor="desktop"] .subagent-card:not(:has(> .subagent-card-body)),
+  [data-editor="desktop"] .collapsable:not(:has(> .content)),
+  [data-editor="desktop"] .flag-banner,
+  [data-editor="desktop"] .chat-question {
     border-top: none;
     border-right: none;
     border-bottom: none;
   }
 
   /* Tighter header padding for chip feel */
-  [data-editor="web"] .tool-call-card > .tool-call-card-header,
-  [data-editor="web"] .reason-card > .reason-card-header,
-  [data-editor="web"] .subagent-card > .subagent-card-header,
-  [data-editor="web"] .collapsable > .header {
+  [data-editor="desktop"] .tool-call-card > .tool-call-card-header,
+  [data-editor="desktop"] .reason-card > .reason-card-header,
+  [data-editor="desktop"] .subagent-card > .subagent-card-header,
+  [data-editor="desktop"] .collapsable > .header {
     padding: 0.35em 0.7em 0.35em 0.55em;
   }
 
   /* Subtle hover when collapsed (the chip is fully clickable).
      When expanded, no bg shift on hover so body content stays calm. */
-  [data-editor="web"] .tool-call-card:not(:has(> .tool-call-card-body)):hover,
-  [data-editor="web"] .reason-card:not(:has(> .reason-card-body)):hover,
-  [data-editor="web"] .subagent-card:not(:has(> .subagent-card-body)):hover,
-  [data-editor="web"] .collapsable:not(:has(> .content)):hover {
+  [data-editor="desktop"] .tool-call-card:not(:has(> .tool-call-card-body)):hover,
+  [data-editor="desktop"] .reason-card:not(:has(> .reason-card-body)):hover,
+  [data-editor="desktop"] .subagent-card:not(:has(> .subagent-card-body)):hover,
+  [data-editor="desktop"] .collapsable:not(:has(> .content)):hover {
     background: color-mix(in srgb, var(--eca-base-bg) 92%, var(--eca-fg) 8%);
   }
 
   /* Thought / reasoning — italic label for a meta feel */
-  [data-editor="web"] .reason-card .reason-label {
+  [data-editor="desktop"] .reason-card .reason-label {
     font-style: italic;
   }
 
   /* Contain code/pre inside tool-call bodies */
-  [data-editor="web"] .tool-call-card-body pre,
-  [data-editor="web"] .tool-call-card-body .inline-code {
+  [data-editor="desktop"] .tool-call-card-body pre,
+  [data-editor="desktop"] .tool-call-card-body .inline-code {
     max-width: 100%;
     overflow-x: auto;
   }
@@ -432,10 +443,10 @@ html[data-editor="web"][data-theme="light"] {
      strip up proportionally. Codicons are locked to 16px by the base
      `.codicon` rule, so they don't inherit em scaling — nudge them
      explicitly so the icons stay visually proportional to the text. */
-  [data-editor="web"] .chat-subheader {
+  [data-editor="desktop"] .chat-subheader {
     font-size: 1.1em;
   }
-  [data-editor="web"] .chat-subheader i.codicon {
+  [data-editor="desktop"] .chat-subheader i.codicon {
     font-size: 18px;
   }
 
@@ -446,7 +457,7 @@ html[data-editor="web"][data-theme="light"] {
      Capping the container at the same 52em used for chat keeps every
      descendant (server-card, provider-card, job-card, settings-tabs,
      etc.) proportional without needing per-card selectors. */
-  [data-editor="web"] .settings-container {
+  [data-editor="desktop"] .settings-container {
     max-width: 52em;
     margin-left: auto;
     margin-right: auto;
@@ -456,7 +467,7 @@ html[data-editor="web"][data-theme="light"] {
   /* Defensive width cap on job console output — its SCSS sets
      max-height but no max-width, so long lines can otherwise blow
      past the now-capped settings column. */
-  [data-editor="web"] .job-output {
+  [data-editor="desktop"] .job-output {
     max-width: 100%;
   }
 

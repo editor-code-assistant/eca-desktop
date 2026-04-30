@@ -62,12 +62,19 @@ function writeCachedTheme(theme: Theme): void {
 
 function applyTheme(theme: Theme): void {
     const html = document.documentElement;
-    // theme.css scopes its --eca-* variables to html[data-editor="web"].
-    // The preferences window sets this attribute via an inline script,
-    // and the embedded webview does it through its own bootstrap; this
-    // makes the main-window sidebar and welcome screen pick it up too.
-    if (html.getAttribute('data-editor') !== 'web') {
-        html.setAttribute('data-editor', 'web');
+    // theme.css scopes its --eca-* variables to html[data-editor="desktop"].
+    //
+    // The embedded eca-webview bundle reads localStorage.editor (set to
+    // "desktop" by index-bootstrap.ts) and assigns
+    // `document.documentElement.dataset.editor = "desktop"` when it
+    // mounts. We seed the same attribute synchronously here so the
+    // sidebar / welcome screen render with the correct theme on first
+    // paint — before the webview module has finished loading. After the
+    // webview mounts, both sides agree on "desktop", so there is no
+    // attribute-flicker fight (which would otherwise break the webview's
+    // own [data-editor="desktop"] modal-card prompt border).
+    if (html.getAttribute('data-editor') !== 'desktop') {
+        html.setAttribute('data-editor', 'desktop');
     }
     html.setAttribute('data-theme', theme);
     writeCachedTheme(theme);
