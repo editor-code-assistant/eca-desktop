@@ -7,7 +7,10 @@
  * Responsibilities:
  *   - Expose `window.mediaUrl` for eca-webview assets (logos, etc.).
  *   - Tell eca-webview which pluggable transport to use by setting the
- *     `editor` localStorage key to `"web"`.
+ *     `editor` localStorage key to `"desktop"`. eca-webview reuses the
+ *     web pluggable transport (`window.__ecaWebTransport`) for the
+ *     desktop host but flips host-specific styling (e.g. the prompt-
+ *     area card border) on the `[data-editor="desktop"]` selector.
  *   - Add a `platform-darwin` body class on macOS so the custom
  *     `.desktop-titlebar` drag region renders (and macOS-specific
  *     padding kicks in).
@@ -50,7 +53,9 @@ const win = window as unknown as IndexWindow & Window;
 win.mediaUrl = '../../eca-webview/dist';
 
 // Set editor type so eca-webview uses the pluggable web transport
-localStorage.setItem('editor', '"web"');
+// (eca-webview's webviewSend treats "desktop" identically to "web") and
+// applies desktop-only styling via the `[data-editor="desktop"]` selector.
+localStorage.setItem('editor', '"desktop"');
 
 // Detect platform and add class for platform-specific styling
 if (win.ecaDesktop && win.ecaDesktop.platform === 'darwin') {
