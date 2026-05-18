@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Inline "+ Add MCP server" form and per-row remove button (with two-step
+  inline confirmation) on the Settings → MCPs tab. Wired
+  `mcp/addServer`, `mcp/removeServer` requests and the `tool/serverRemoved`
+  notification end-to-end through the Electron main bridge.
+
 ## [0.6.3]
 
 ### Fixed
