@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through to the eca server, so the webview's resume-chat picker can list
   and open persisted chats alongside the existing native sidebar.
 
+### Fixed
+- Clicking a chat in the native sidebar no longer throws a TypeError in the
+  embedded webview. The host-driven `chat/selectChat` event was setting
+  `selectedChat` to a chatId that did not yet exist in the webview's redux
+  store (the server's `chat/opened` cascade arrives strictly after the
+  selection event), causing `ChatContexts` to deref undefined. Fixed by
+  having the webview's `selectChat` reducer mint an empty placeholder slot.
+- Chat-resume picker is now readable on Light themes. The previous palette
+  used `--eca-tooltip-bg` and `--eca-base-hover`, both of which the
+  codebase has documented as producing dark-popup-on-light-IDE surfaces.
+
 ## [0.6.3]
 
 ### Fixed
