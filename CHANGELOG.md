@@ -6,13 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ### Added
-
 - Inline "+ Add MCP server" form and per-row remove button (with two-step
   inline confirmation) on the Settings → MCPs tab. Wired
   `mcp/addServer`, `mcp/removeServer` requests and the `tool/serverRemoved`
   notification end-to-end through the Electron main bridge.
+- Forward `chat/list` and `chat/open` requests from the embedded webview
+  through to the eca server, so the webview's resume-chat picker can list
+  and open persisted chats alongside the existing native sidebar.
 
 ## [0.6.3]
 

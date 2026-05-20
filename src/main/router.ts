@@ -225,6 +225,50 @@ const routes: Record<string, RouteHandler> = {
         }
     },
 
+    // ── Chat resume picker ──
+    //
+    // The embedded eca-webview's resume picker calls these two
+    // messages: `chat/list` to populate the picker, then `chat/open`
+    // when the user picks a chat. The server's `chat/open` emits
+    // `chat/cleared` → `chat/opened` → N × `chat/contentReceived` →
+    // `config/updated` notifications BEFORE returning — those are
+    // already wired in `bridge.ts:onNotification` and forwarded to
+    // BOTH the renderer's native sidebar AND the embedded webview,
+    // so the two surfaces converge on the same selected chat. Note:
+    // the main process also uses these RPCs internally for the
+    // native sidebar (`loadSessionChats` and `selectChatInSession`
+    // in bridge.ts); a webview-side picker click will trigger the
+    // same notification cascade and update both UIs.
+
+    'chat/list': async (ctx, data) => {
+        try {
+            const result = await ctx.conn.sendRequest(rpcTypes.chatList, {
+                limit: data.limit,
+                sortBy: data.sortBy,
+            });
+            ctx.sendToRenderer('chat/list', { ...result, requestId: data.requestId });
+        } catch (err) {
+            ctx.sendToRenderer('chat/list', {
+                requestId: data.requestId,
+                error: { code: 'rpc_error', message: (err as Error).message ?? 'Unknown error' },
+            });
+        }
+    },
+
+    'chat/open': async (ctx, data) => {
+        try {
+            const result = await ctx.conn.sendRequest(rpcTypes.chatOpen, {
+                chatId: data.chatId,
+            });
+            ctx.sendToRenderer('chat/open', { ...result, requestId: data.requestId });
+        } catch (err) {
+            ctx.sendToRenderer('chat/open', {
+                requestId: data.requestId,
+                error: { code: 'rpc_error', message: (err as Error).message ?? 'Unknown error' },
+            });
+        }
+    },
+
     // ── Providers ──
 
     'providers/list': async (ctx, data) => {
