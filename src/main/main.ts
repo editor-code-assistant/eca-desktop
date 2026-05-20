@@ -13,6 +13,7 @@ import { PreferencesStore, isValidTheme } from './preferences-store';
 import { getPreferencesWindow } from './preferences-window';
 import type { WorkspaceFolder } from './protocol';
 import { sanitizeExternalUrl } from './security/url-allowlist';
+import { resolveShellEnv } from './shell-env';
 
 // Canonical Electron idiom: `app.isPackaged` is true only in production
 // builds (electron-builder output). Switching from `NODE_ENV==='development'`
@@ -225,6 +226,25 @@ async function main(): Promise<void> {
       });
     }
   });
+
+  // Warm up the shell-env resolver early (fire-and-forget) so the first
+  // session-create reuses the cached result rather than paying the
+  // shell-startup cost (typically 1–3s) during ECA spawn. Routes its
+  // diagnostic output through the LogStore so it surfaces in the Logs
+  // tab alongside other server-lifecycle events. See `shell-env.ts` for
+  // the rationale (macOS/Linux GUI apps inherit launchd's truncated
+  // PATH, missing brew / asdf / nvm / fnm / pnpm / ...).
+  {
+    const prefs = preferencesStore.get();
+    void resolveShellEnv({
+      enabled: prefs.resolveShellEnv !== false,
+      timeoutMs: prefs.shellEnvResolutionTimeoutMs,
+      onLog: (msg) => logStore.append({
+        source: 'desktop',
+        text: `[ShellEnv] ${msg}`,
+      }),
+    });
+  }
 
   createMenu(mainWindow);
 

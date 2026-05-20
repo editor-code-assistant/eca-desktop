@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forward `chat/list` and `chat/open` requests from the embedded webview
   through to the eca server, so the webview's resume-chat picker can list
   and open persisted chats alongside the existing native sidebar.
+- macOS/Linux: resolve the user's login+interactive shell env (PATH,
+  HOMEBREW_PREFIX, NVM_DIR, FNM_DIR, PNPM_HOME, …) before spawning the
+  ECA server, so binaries the user installed via brew/asdf/nvm/etc. are
+  visible to the server and any MCP subprocesses it spawns — fixing the
+  long-standing "GUI app launched from Finder/launchctl can't find my
+  tools" issue. Cached singleton, 10s timeout (clamped 1–120s,
+  configurable via `shellEnvResolutionTimeoutMs`), skipped on Windows or
+  when launched from a terminal. Sets `ECA_RESOLVING_ENVIRONMENT=1` on
+  the spawned shell so users can guard slow dotfile blocks (tmux
+  auto-attach, ssh-agent, …). Opt-out via the `resolveShellEnv` pref or
+  the `ECA_SKIP_SHELL_ENV=1` env var.
 
 ### Fixed
 - Closing the last session now returns to the welcome splash instead of

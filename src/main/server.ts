@@ -27,6 +27,7 @@ import {
     getDataDir,
 } from './constants';
 import type { PreferencesStore } from './preferences-store';
+import { resolveShellEnv } from './shell-env';
 
 // ── GitHub release shape (narrow type guard) ──
 // Replaces the audit-flagged `releases[0]?.tag_name` access on `unknown`.
@@ -633,9 +634,24 @@ export class EcaServer {
                 return;
             }
 
+            // Resolve the user's shell environment (PATH, HOMEBREW_PREFIX,
+            // NVM_DIR, ...) before spawning. On macOS / Linux a GUI-launched
+            // Electron inherits launchctl's truncated PATH (no homebrew,
+            // asdf, nvm, ...), which leaves the ECA server unable to find
+            // most tools the user installed. `resolveShellEnv` is cached
+            // (warmed up at app start) and returns `{}` on Windows or on
+            // any failure — never blocks startup.
+            const prefs = this.preferencesStore?.get();
+            const shellEnv = await resolveShellEnv({
+                enabled: prefs?.resolveShellEnv !== false,
+                timeoutMs: prefs?.shellEnvResolutionTimeoutMs,
+                onLog: this.onLog,
+            });
+
             this.onLog(`Starting ECA server: ${serverPath}`);
             this._proc = spawn(serverPath, ['server'], {
                 stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, ...shellEnv },
             });
 
             this._proc.stderr?.on('data', (data: Buffer) => {

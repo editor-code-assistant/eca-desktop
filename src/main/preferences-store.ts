@@ -31,7 +31,20 @@ export interface Preferences {
     /** Whether the sidebar is collapsed to an icon rail (48px) instead of
      *  the full 260px width. When unset, defaults to `false` (expanded). */
     sidebarCollapsed?: boolean;
+    /** Whether to resolve the user's login+interactive shell env (PATH,
+     *  HOMEBREW_PREFIX, NVM_DIR, ...) before spawning the ECA server.
+     *  Mitigates the macOS/Linux "GUI app launched from Finder/launchctl
+     *  doesn't inherit dotfile PATH" problem. No-op on Windows. When
+     *  unset, defaults to `true`. */
+    resolveShellEnv?: boolean;
+    /** Maximum wall-clock time in milliseconds for the shell to print
+     *  its env. Clamped to `[1_000, 120_000]` on set. When unset,
+     *  defaults to `10_000`. */
+    shellEnvResolutionTimeoutMs?: number;
 }
+
+const SHELL_ENV_TIMEOUT_MIN_MS = 1_000;
+const SHELL_ENV_TIMEOUT_MAX_MS = 120_000;
 
 const DEFAULT_PREFERENCES: Preferences = {
     schemaVersion: 1,
@@ -92,6 +105,22 @@ export class PreferencesStore {
         // Normalize: invalid theme values -> unset (renderer falls back to 'dark').
         if (merged.theme !== undefined && !isValidTheme(merged.theme)) {
             delete merged.theme;
+        }
+
+        // Normalize the shell-env timeout. Non-numeric / non-finite values
+        // are dropped (renderer falls back to the default); finite values
+        // are clamped into the supported range so a typo can't disable
+        // the resolver outright or wedge it for two minutes.
+        if (merged.shellEnvResolutionTimeoutMs !== undefined) {
+            const t = merged.shellEnvResolutionTimeoutMs;
+            if (typeof t !== 'number' || !Number.isFinite(t)) {
+                delete merged.shellEnvResolutionTimeoutMs;
+            } else {
+                merged.shellEnvResolutionTimeoutMs = Math.min(
+                    SHELL_ENV_TIMEOUT_MAX_MS,
+                    Math.max(SHELL_ENV_TIMEOUT_MIN_MS, Math.floor(t)),
+                );
+            }
         }
 
         this.preferences = merged;
