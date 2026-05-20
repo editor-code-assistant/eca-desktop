@@ -53,6 +53,22 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
     let recentWorkspaces: RecentWorkspace[] = [];
     let hasSessions = false;
 
+    // Pending hide-welcome timer scheduled by `render(hasSessions=true)`.
+    // We track it so a subsequent `render(false)` (e.g. user closed the
+    // last session) can cancel it — otherwise the stale timeout fires
+    // ~150ms later and removes the `welcome-active` class we just
+    // re-added, dumping the user back to an empty sidebar instead of
+    // the splash screen.
+    //
+    // The race is real: closing a session triggers two session-list-update
+    // events in quick succession. The first arrives mid-`removeSession`
+    // when `EcaServer.setStatus(Stopped)` fires before the session is
+    // deleted from the map (sessions=[stoppedSession] ⇒ hasSessions=true,
+    // schedules T1). The second arrives once the session is actually
+    // removed (sessions=[] ⇒ hasSessions=false, brings welcome back).
+    // T1 then fires unsupervised and hides everything we just restored.
+    let pendingHideTimer: number | null = null;
+
     // ── Code Rain (subtle falling code characters) ──
 
     const snippets = [
@@ -239,6 +255,16 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
     }
 
     function render(): void {
+        // Cancel any in-flight fade-out timer from a previous render.
+        // Without this, a render(true) → render(false) flip within
+        // 150ms (the closing-a-session race described above) would let
+        // the stale timeout fire after we've already shown the welcome
+        // back, undoing it.
+        if (pendingHideTimer !== null) {
+            clearTimeout(pendingHideTimer);
+            pendingHideTimer = null;
+        }
+
         if (hasSessions) {
             root.style.display = '';
             const logo = welcomeScreen.querySelector(
@@ -246,7 +272,12 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
             ) as HTMLElement | null;
             if (logo) logo.style.animation = 'none';
             welcomeScreen.classList.add('fade-out');
-            setTimeout(() => {
+            pendingHideTimer = window.setTimeout(() => {
+                pendingHideTimer = null;
+                // Re-check inside the callback: if hasSessions flipped
+                // back to false during the fade, we already re-rendered
+                // the welcome and must not hide it now.
+                if (!hasSessions) return;
                 welcomeScreen.style.display = 'none';
                 document.body.classList.remove('welcome-active');
                 stopRain();

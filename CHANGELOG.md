@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and open persisted chats alongside the existing native sidebar.
 
 ### Fixed
+- Closing the last session now returns to the welcome splash instead of
+  leaving an empty sidebar. A stale fade-out timer from a mid-`removeSession`
+  status update was firing after the welcome had been restored and undoing it.
 - Clicking a chat in the native sidebar no longer throws a TypeError in the
   embedded webview. The host-driven `chat/selectChat` event was setting
   `selectedChat` to a chatId that did not yet exist in the webview's redux
