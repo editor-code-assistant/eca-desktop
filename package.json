@@ -49,5 +49,10 @@
     "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.4",
     "wait-on": "^8.0.3"
+  },
+  "overrides": {
+    "axios": "^1.15.2",
+    "@xmldom/xmldom": "^0.8.13",
+    "ip-address": "^10.1.1"
   }
 }

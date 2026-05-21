@@ -51,6 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used `--eca-tooltip-bg` and `--eca-base-hover`, both of which the
   codebase has documented as producing dark-popup-on-light-IDE surfaces.
 
+### Security
+- Pin vulnerable transitive deps via npm `overrides`: `axios` to
+  `^1.15.2` (prototype-pollution, header/CRLF injection, SSRF,
+  XSRF token leak, null-byte injection), `@xmldom/xmldom` to
+  `^0.8.13` (XML node injection), and `ip-address` to `^10.1.1`
+  (XSS in `Address6` HTML helpers). Closes all 12 Dependabot
+  alerts.
+
 ## [0.6.3]
 
 ### Fixed
