@@ -17,13 +17,23 @@ import type { SessionManager, Session } from './session-manager';
 // Track MCP server, config and providers state per session. Cleaned up
 // in `dropSessionCaches` when a session is removed, so long-running
 // users aren't bleeding one entry per closed workspace forever.
+//
+// `configCache` stores the cumulative GLOBAL (unscoped) session config —
+// merged across successive `config/updated` notifications so partial
+// updates (e.g. a single `chat.selectModel` change) don't clobber the
+// `chat.models` / `chat.agents` / `chat.variants` arrays that arrived
+// in earlier full updates. Per-chat scoped updates (those with a
+// top-level `chatId`) are stored separately in `perChatConfigCache`
+// and replayed after `chatState.rehydrate` on `webview/ready`.
 const mcpServers = new Map<string, Record<string, ToolServerUpdatedParams>>();
 const configCache = new Map<string, unknown>();
+const perChatConfigCache = new Map<string, Map<string, unknown>>();
 const providersCache = new Map<string, unknown>();
 
 export function dropSessionCaches(sessionId: string): void {
     mcpServers.delete(sessionId);
     configCache.delete(sessionId);
+    perChatConfigCache.delete(sessionId);
     providersCache.delete(sessionId);
 }
 
@@ -301,7 +311,51 @@ export function createBridge(
         });
 
         conn.onNotification(rpc.configUpdated, (params) => {
-            configCache.set(session.id, params);
+            // The server emits two flavours of `config/updated`:
+            //
+            //   (a) unscoped/global — the initial post-`initialize` push
+            //       carrying `chat: { models, agents, variants,
+            //       selectModel, selectAgent, … }`, plus incremental
+            //       global partials (e.g. just `chat.selectModel` on a
+            //       session-default change).
+            //
+            //   (b) per-chat scoped — emitted as the last step of the
+            //       `chat/open` cascade (see protocol.ts) and on
+            //       `chat/selected*Changed`. These carry a top-level
+            //       `chatId` plus only the per-chat fields
+            //       (`selectModel` / `selectTrust` / etc.) — they do
+            //       NOT include the `models` / `agents` / `variants`
+            //       arrays the selectors need.
+            //
+            // Mixing the two into a single cache (the previous
+            // `configCache.set(..., params)`) meant the very first
+            // chat selection would clobber the cumulative global cache
+            // with a stripped-down per-chat payload, and Ctrl+R would
+            // re-send that payload on `webview/ready` — leaving the
+            // model / agent / variant selectors empty because the
+            // renderer's `setConfig` reducer treats undefined fields
+            // as "leave alone".
+            const p = params as { chatId?: string; chat?: Record<string, unknown> } & Record<string, unknown>;
+            if (p.chatId) {
+                let perChat = perChatConfigCache.get(session.id);
+                if (!perChat) {
+                    perChat = new Map();
+                    perChatConfigCache.set(session.id, perChat);
+                }
+                perChat.set(p.chatId, params);
+            } else {
+                // Merge (not overwrite) — incremental global updates must
+                // preserve fields carried by earlier full updates.
+                const existing = (configCache.get(session.id) ?? {}) as Record<string, unknown>;
+                const existingChat = (existing.chat as Record<string, unknown> | undefined) ?? {};
+                const incomingChat = (p.chat as Record<string, unknown> | undefined) ?? {};
+                const merged: Record<string, unknown> = {
+                    ...existing,
+                    ...p,
+                    chat: { ...existingChat, ...incomingChat },
+                };
+                configCache.set(session.id, merged);
+            }
             if (session.id === sessionManager.activeSessionId) {
                 sendToRenderer('config/updated', params);
             }
@@ -418,8 +472,30 @@ export function createBridge(
 
         try {
             if (message.type === 'webview/ready') {
-                sendToRenderer('server/statusChanged', session!.ecaServer.status);
-                sendToRenderer('server/setWorkspaceFolders', [session!.workspaceFolder]);
+                // Full rehydration on every webview load — covers fresh
+                // mount AND Ctrl+R / window.location.reload(). Fires
+                // from a React useEffect, so the renderer's
+                // `window.addEventListener('message', …)` handlers are
+                // guaranteed attached by the time this lands. That's the
+                // silent race the `did-finish-load` path is subject to,
+                // which is why selectors came back empty after Ctrl+R.
+                sendSessionContext(session!);
+                session!.chatState.rehydrate(sendToRenderer, [session!.workspaceFolder]);
+                // After the chats are open in the webview, replay any
+                // per-chat `config/updated` overrides so each chat's
+                // selectedModel / selectTrust survives the reload. The
+                // applyConfigToChat reducer is a no-op for chats that
+                // aren't in the slice yet, so order vs. rehydrate is
+                // safe either way — we replay after to minimise wasted
+                // work on chats the user never opened.
+                const perChatConfigs = perChatConfigCache.get(session!.id);
+                if (perChatConfigs) {
+                    for (const config of perChatConfigs.values()) {
+                        sendToRenderer('config/updated', config);
+                    }
+                }
+                sendChatListUpdate();
+                sendSessionListUpdate();
                 return;
             }
 

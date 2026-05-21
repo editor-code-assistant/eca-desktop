@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `ECA_SKIP_SHELL_ENV=1` env var.
 
 ### Fixed
+- Ctrl+R / window reload no longer leaves the chat input with empty
+  model, agent, and variant selectors. The session config cache was
+  being overwritten by per-chat scoped `config/updated` notifications
+  (emitted at the end of every `chat/open`) which carry only
+  `selectModel` / `selectTrust` — not the `models` / `agents` /
+  `variants` arrays the selectors need. After the first chat
+  selection the cumulative global config was lost, so on reload the
+  `webview/ready` handshake had a stripped-down payload to replay.
+  Per-chat updates now go to a separate per-chat cache; global
+  updates merge (rather than overwrite) into the cumulative cache;
+  both are replayed when the webview comes back.
 - Closing the last session now returns to the welcome splash instead of
   leaving an empty sidebar. A stale fade-out timer from a mid-`removeSession`
   status update was firing after the welcome had been restored and undoing it.
