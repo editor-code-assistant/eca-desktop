@@ -58,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `^0.8.13` (XML node injection), and `ip-address` to `^10.1.1`
   (XSS in `Address6` HTML helpers). Closes all 12 Dependabot
   alerts.
+- Bump `electron` 33 -> 41 (closes 18 runtime advisories: ASAR
+  integrity bypass, AppleScript injection, multiple UAFs, IPC
+  spoofing, iframe permission origin confusion, header injection,
+  and more) and `electron-builder` 25 -> 26 (closes 10 dev-time
+  advisories in tar/node-gyp/cacache/@electron/rebuild). `npm audit`
+  now reports 0 vulnerabilities. Note: packaging now requires
+  Node >= 22 because of `@electron/rebuild@4`.
 
 ## [0.6.3]
 

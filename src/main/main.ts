@@ -201,7 +201,9 @@ async function main(): Promise<void> {
 
   // On macOS, the dock icon in dev mode defaults to the Electron logo.
   // Explicitly set it to the ECA icon so it matches production builds.
-  if (process.platform === 'darwin') {
+  // `app.dock` is typed as optional since Electron 41 (it's macOS-only),
+  // so guard accordingly.
+  if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(path.join(__dirname, '../resources/icon.png'));
   }
 
