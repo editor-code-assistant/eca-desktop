@@ -108,6 +108,16 @@ export const DOWNLOAD_RETRY_DELAY_MS = 2_000;
 // Exponential backoff factor used by downloadFile: delay = base * factor^attempt.
 export const DOWNLOAD_RETRY_BACKOFF_FACTOR = 2;
 
+// Retry policy for small HTTP fetches (releases API, sha256sums.txt).
+// Same 4-attempt budget as downloads but with a tighter base delay (1s
+// vs 2s) since these payloads are tiny and each attempt is already
+// capped at HTTP_TIMEOUT_MS. Without retries here, a single blip on
+// api.github.com silently skipped checksum verification or forced the
+// cached-binary fallback path.
+export const HTTP_MAX_RETRIES = 3;
+export const HTTP_RETRY_DELAY_MS = 1_000;
+export const HTTP_RETRY_BACKOFF_FACTOR = 2;
+
 // ── Server lifecycle ──
 
 // Hard deadline for the `initialize` JSON-RPC round-trip. If the spawned

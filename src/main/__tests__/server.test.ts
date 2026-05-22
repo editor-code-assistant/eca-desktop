@@ -40,6 +40,7 @@ vi.mock('electron', () => ({
 }));
 
 import { EcaServer, EcaServerStatus } from '../server';
+import { HTTP_MAX_RETRIES } from '../constants';
 
 // ── Helpers ──
 
@@ -49,43 +50,64 @@ interface HttpsResponseOpts {
     requestError?: Error;
 }
 
-function configureHttpsOnce(opts: HttpsResponseOpts = {}): void {
+// Shared mock implementation factory used by both the one-shot and the
+// persistent configure helpers.
+function makeHttpsImpl(opts: HttpsResponseOpts) {
     const { statusCode = 200, body = '', requestError } = opts;
-    mockHttpsGet.mockImplementationOnce(
-        (
-            _url: string,
-            options: unknown,
-            callback?: (res: unknown) => void,
-        ) => {
-            // follow-redirects supports both (url, cb) and (url, opts, cb)
-            const cb = typeof options === 'function'
-                ? (options as (res: unknown) => void)
-                : callback!;
-            const req = new EventEmitter() as EventEmitter & {
-                on: EventEmitter['on'];
+    return (
+        _url: string,
+        options: unknown,
+        callback?: (res: unknown) => void,
+    ): EventEmitter => {
+        // follow-redirects supports both (url, cb) and (url, opts, cb)
+        const cb = typeof options === 'function'
+            ? (options as (res: unknown) => void)
+            : callback!;
+        const req = new EventEmitter() as EventEmitter & {
+            on: EventEmitter['on'];
+        };
+        process.nextTick(() => {
+            if (requestError) {
+                req.emit('error', requestError);
+                return;
+            }
+            const res = new EventEmitter() as EventEmitter & {
+                statusCode?: number;
+                resume: () => void;
             };
-            process.nextTick(() => {
-                if (requestError) {
-                    req.emit('error', requestError);
-                    return;
-                }
-                const res = new EventEmitter() as EventEmitter & {
-                    statusCode?: number;
-                    resume: () => void;
-                };
-                res.statusCode = statusCode;
-                res.resume = (): void => { /* noop */ };
-                cb(res);
-                // Error path: don't emit data/end.
-                if (statusCode >= 200 && statusCode < 300) {
-                    const text = typeof body === 'string' ? body : JSON.stringify(body);
-                    res.emit('data', text);
-                    res.emit('end');
-                }
-            });
-            return req;
-        },
-    );
+            res.statusCode = statusCode;
+            res.resume = (): void => { /* noop */ };
+            cb(res);
+            // Error path: don't emit data/end.
+            if (statusCode >= 200 && statusCode < 300) {
+                const text = typeof body === 'string' ? body : JSON.stringify(body);
+                res.emit('data', text);
+                res.emit('end');
+            }
+        });
+        return req;
+    };
+}
+
+function configureHttpsOnce(opts: HttpsResponseOpts = {}): void {
+    mockHttpsGet.mockImplementationOnce(makeHttpsImpl(opts));
+}
+
+// Persistent counterpart for tests that need every call to behave the
+// same way (e.g. retry-exhaustion paths where the call is repeated
+// HTTP_MAX_RETRIES + 1 times with the same outcome).
+function configureHttpsAlways(opts: HttpsResponseOpts = {}): void {
+    mockHttpsGet.mockImplementation(makeHttpsImpl(opts));
+}
+
+// Helper for tests that exercise the retry loop: prevents the unhandled-
+// rejection lint while draining fake timers between attempts.
+async function awaitWithFakeTimers<T>(promise: Promise<T>): Promise<T> {
+    // Attach a no-op catch BEFORE we yield to the timer driver so a
+    // rejection during runAllTimersAsync doesn't surface as unhandled.
+    promise.catch(() => undefined);
+    await vi.runAllTimersAsync();
+    return promise;
 }
 
 // ── Tests ──
@@ -180,27 +202,50 @@ describe('EcaServer', () => {
             await expect(s.getLatestVersion()).rejects.toThrow(/No ECA server releases/);
         });
 
-        it('rejects on HTTP error status (no silent fallback)', async () => {
-            configureHttpsOnce({ statusCode: 403, body: 'rate limited' });
+        it('rejects on HTTP error status after exhausting retries', async () => {
+            vi.useFakeTimers();
+            configureHttpsAlways({ statusCode: 403, body: 'rate limited' });
             const s = new EcaServer();
-            await expect(s.getLatestVersion()).rejects.toThrow(/HTTP 403/);
+            const promise = s.getLatestVersion();
+            await expect(awaitWithFakeTimers(promise)).rejects.toThrow(/HTTP 403/);
+            // 1 initial attempt + HTTP_MAX_RETRIES retries.
+            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
         });
 
-        it('rejects on request error', async () => {
-            configureHttpsOnce({ requestError: new Error('ECONNRESET') });
+        it('rejects on request error after exhausting retries', async () => {
+            vi.useFakeTimers();
+            configureHttpsAlways({ requestError: new Error('ECONNRESET') });
             const s = new EcaServer();
-            await expect(s.getLatestVersion()).rejects.toThrow(/ECONNRESET/);
+            const promise = s.getLatestVersion();
+            await expect(awaitWithFakeTimers(promise)).rejects.toThrow(/ECONNRESET/);
+            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
+        });
+
+        it('retries on transient failure and eventually succeeds', async () => {
+            vi.useFakeTimers();
+            // First two attempts fail, third succeeds.
+            configureHttpsOnce({ requestError: new Error('ECONNRESET') });
+            configureHttpsOnce({ statusCode: 503, body: 'service unavailable' });
+            configureHttpsOnce({ body: [{ tag_name: 'v0.6.0' }] });
+            const s = new EcaServer();
+            const promise = s.getLatestVersion();
+            await vi.runAllTimersAsync();
+            await expect(promise).resolves.toBe('v0.6.0');
+            expect(mockHttpsGet).toHaveBeenCalledTimes(3);
         });
     });
 
     describe('getLatestVersionSafe', () => {
-        it('returns empty string on error and logs the reason', async () => {
-            configureHttpsOnce({ statusCode: 500, body: '' });
+        it('returns empty string after exhausting retries and logs the reason', async () => {
+            vi.useFakeTimers();
+            configureHttpsAlways({ statusCode: 500, body: '' });
             const s = new EcaServer();
             const logs: string[] = [];
             s.onLog = (msg): void => { logs.push(msg); };
-            await expect(s.getLatestVersionSafe()).resolves.toBe('');
+            const promise = s.getLatestVersionSafe();
+            await expect(awaitWithFakeTimers(promise)).resolves.toBe('');
             expect(logs.some((m) => /Could not fetch/i.test(m))).toBe(true);
+            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
         });
 
         it('returns tag_name on success', async () => {
@@ -257,13 +302,29 @@ describe('EcaServer', () => {
             await expect(s.getExpectedChecksum('v0.6.0', artifact)).resolves.toBeNull();
         });
 
-        it('returns null when the sha256sums.txt HTTP fetch fails', async () => {
-            configureHttpsOnce({ statusCode: 404 });
+        it('returns null after exhausting retries when the sha256sums.txt fetch fails', async () => {
+            vi.useFakeTimers();
+            configureHttpsAlways({ statusCode: 404 });
             const s = new EcaServer();
             const logs: string[] = [];
             s.onLog = (msg): void => { logs.push(msg); };
-            await expect(s.getExpectedChecksum('v0.6.0', artifact)).resolves.toBeNull();
+            const promise = s.getExpectedChecksum('v0.6.0', artifact);
+            await expect(awaitWithFakeTimers(promise)).resolves.toBeNull();
             expect(logs.some((m) => /No sha256sums\.txt/i.test(m))).toBe(true);
+            // Verify the retry budget was honoured before giving up.
+            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
+        });
+
+        it('retries the sha256sums.txt fetch on transient failure and succeeds', async () => {
+            vi.useFakeTimers();
+            // First attempt blips, second returns the checksum file.
+            configureHttpsOnce({ requestError: new Error('ETIMEDOUT') });
+            configureHttpsOnce({ body: `abc123  ${artifact}\n` });
+            const s = new EcaServer();
+            const promise = s.getExpectedChecksum('v0.6.0', artifact);
+            await vi.runAllTimersAsync();
+            await expect(promise).resolves.toBe('abc123');
+            expect(mockHttpsGet).toHaveBeenCalledTimes(2);
         });
 
         it('skips malformed lines (single-token)', async () => {

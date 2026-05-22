@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the spawned shell so users can guard slow dotfile blocks (tmux
   auto-attach, ssh-agent, …). Opt-out via the `resolveShellEnv` pref or
   the `ECA_SKIP_SHELL_ENV=1` env var.
+- Retry transient failures on the GitHub releases API and
+  `sha256sums.txt` fetches with exponential backoff (1s/2s/4s, up to 4
+  attempts). Previously a single network blip would silently skip
+  SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
 - Ctrl+R / window reload no longer leaves the chat input with empty

@@ -15,6 +15,9 @@ import {
     CLIENT_VERSION,
     PLATFORM_ARTIFACTS,
     HTTP_TIMEOUT_MS,
+    HTTP_MAX_RETRIES,
+    HTTP_RETRY_DELAY_MS,
+    HTTP_RETRY_BACKOFF_FACTOR,
     DOWNLOAD_TIMEOUT_MS,
     DOWNLOAD_MAX_RETRIES,
     DOWNLOAD_RETRY_DELAY_MS,
@@ -89,7 +92,7 @@ export enum EcaServerStatus {
     Failed = 'Failed',
 }
 
-function fetchJson(url: string): Promise<unknown> {
+function fetchJsonOnce(url: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
@@ -126,7 +129,24 @@ function fetchJson(url: string): Promise<unknown> {
     });
 }
 
-function fetchText(url: string): Promise<string> {
+// Retrying wrapper around `fetchJsonOnce`. Transient failures (DNS
+// hiccups, rate-limit responses, TLS resets, idle-socket aborts) are
+// retried with exponential backoff before the error propagates to
+// callers like `getLatestVersion`, which previously would dead-end on
+// the very first blip.
+function fetchJson(url: string): Promise<unknown> {
+    return withRetry(
+        () => fetchJsonOnce(url),
+        {
+            maxRetries: HTTP_MAX_RETRIES,
+            baseDelayMs: HTTP_RETRY_DELAY_MS,
+            backoffFactor: HTTP_RETRY_BACKOFF_FACTOR,
+            label: `GET ${url}`,
+        },
+    );
+}
+
+function fetchTextOnce(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
@@ -157,6 +177,22 @@ function fetchText(url: string): Promise<string> {
             reject(err);
         });
     });
+}
+
+// Retrying wrapper around `fetchTextOnce`. Crucial for the sha256sums
+// fetch path: without retries, a single transient blip would silently
+// downgrade install to the "skip checksum verification" branch, which
+// defeats the supply-chain integrity check entirely.
+function fetchText(url: string): Promise<string> {
+    return withRetry(
+        () => fetchTextOnce(url),
+        {
+            maxRetries: HTTP_MAX_RETRIES,
+            baseDelayMs: HTTP_RETRY_DELAY_MS,
+            backoffFactor: HTTP_RETRY_BACKOFF_FACTOR,
+            label: `GET ${url}`,
+        },
+    );
 }
 
 function downloadFileOnce(url: string, destPath: string): Promise<void> {
@@ -205,26 +241,57 @@ function downloadFileOnce(url: string, destPath: string): Promise<void> {
     });
 }
 
-async function downloadFile(url: string, destPath: string): Promise<void> {
+/**
+ * Generic retry+exponential-backoff wrapper. Retries the same operation
+ * up to `maxRetries` additional times (so `maxRetries + 1` attempts
+ * total) with delay `baseDelayMs * backoffFactor^attempt` between
+ * attempts. The error from the final attempt propagates unchanged so
+ * callers see the original failure reason.
+ *
+ * Used for both binary downloads (DOWNLOAD_* constants, 2s base) and
+ * small JSON/text fetches (HTTP_* constants, 1s base). No retry
+ * classification — every error triggers a retry, matching the existing
+ * download policy.
+ */
+async function withRetry<T>(
+    operation: () => Promise<T>,
+    opts: {
+        maxRetries: number;
+        baseDelayMs: number;
+        backoffFactor: number;
+        label: string;
+    },
+): Promise<T> {
     let lastErr: unknown;
-    for (let attempt = 0; attempt <= DOWNLOAD_MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
         try {
-            await downloadFileOnce(url, destPath);
-            return;
+            return await operation();
         } catch (err) {
             lastErr = err;
-            if (attempt < DOWNLOAD_MAX_RETRIES) {
-                const delay = DOWNLOAD_RETRY_DELAY_MS *
-                    Math.pow(DOWNLOAD_RETRY_BACKOFF_FACTOR, attempt);
+            if (attempt < opts.maxRetries) {
+                const delay = opts.baseDelayMs *
+                    Math.pow(opts.backoffFactor, attempt);
                 const message = err instanceof Error ? err.message : String(err);
-                console.warn(`[Server] Download attempt ${attempt + 1} failed (${message}), retrying in ${delay}ms...`);
+                console.warn(`[Server] ${opts.label} attempt ${attempt + 1} failed (${message}), retrying in ${delay}ms...`);
                 await new Promise(r => setTimeout(r, delay));
             }
         }
     }
     throw lastErr instanceof Error
         ? lastErr
-        : new Error('Download failed after retries');
+        : new Error(`${opts.label} failed after retries`);
+}
+
+function downloadFile(url: string, destPath: string): Promise<void> {
+    return withRetry(
+        () => downloadFileOnce(url, destPath),
+        {
+            maxRetries: DOWNLOAD_MAX_RETRIES,
+            baseDelayMs: DOWNLOAD_RETRY_DELAY_MS,
+            backoffFactor: DOWNLOAD_RETRY_BACKOFF_FACTOR,
+            label: 'Download',
+        },
+    );
 }
 
 async function sha256OfFile(filePath: string): Promise<string> {
