@@ -304,6 +304,13 @@ async function sha256OfFile(filePath: string): Promise<string> {
     });
 }
 
+// Single-flight guard for binary downloads. Every session owns its own
+// EcaServer instance, but they all share the managed binary under
+// ~/.eca-desktop — two sessions starting at once must never download and
+// extract over each other. Keyed by version so concurrent callers for
+// the same version await one shared install.
+let inflightDownload: { version: string; promise: Promise<void> } | null = null;
+
 export class EcaServer {
     private _proc: ChildProcess | null = null;
     private _connection: rpc.MessageConnection | null = null;
@@ -544,64 +551,122 @@ export class EcaServer {
 
     writeVersionFile(version: string): void {
         const versionPath = path.join(getDataDir(), 'eca-version');
-        fs.writeFileSync(versionPath, version, 'utf-8');
+        // Atomic write (temp file + rename) so a concurrent reader can
+        // never observe a partially-written version string.
+        const tmpPath = `${versionPath}.tmp-${process.pid}`;
+        fs.writeFileSync(tmpPath, version, 'utf-8');
+        fs.renameSync(tmpPath, versionPath);
     }
 
     async downloadServer(version: string): Promise<void> {
+        if (inflightDownload?.version === version) {
+            this.onLog(`ECA server ${version} download already in progress; waiting for it.`);
+            return inflightDownload.promise;
+        }
+        if (!inflightDownload) {
+            this.cleanupStaleStageDirs();
+        }
+        const promise = this.performDownload(version).finally(() => {
+            if (inflightDownload?.promise === promise) {
+                inflightDownload = null;
+            }
+        });
+        inflightDownload = { version, promise };
+        return promise;
+    }
+
+    /** Remove stage dirs left behind by a previous crashed/killed run. */
+    private cleanupStaleStageDirs(): void {
+        const dataDir = getDataDir();
+        try {
+            for (const entry of fs.readdirSync(dataDir)) {
+                if (entry.startsWith('.eca-download-')) {
+                    fs.rmSync(path.join(dataDir, entry), { recursive: true, force: true });
+                }
+            }
+        } catch { /* best-effort */ }
+    }
+
+    /**
+     * Download + verify + install the server binary.
+     *
+     * Everything is staged in a temp directory on the same filesystem and
+     * the final install is a single `rename(2)`. The previous
+     * implementation extracted the zip directly over the live managed
+     * binary; any session still executing that file could crash — macOS
+     * in particular SIGKILLs a running process whose backing executable
+     * is rewritten (code-signature invalidation), which surfaced as
+     * "exited with code null" whenever a new session pulled an update
+     * while other sessions were running. A rename only swaps the
+     * directory entry, so running processes keep their old inode and are
+     * untouched.
+     */
+    private async performDownload(version: string): Promise<void> {
         const artifactName = this.getArtifactName();
         const downloadUrl = `${GITHUB_RELEASES_DOWNLOAD}/${version}/${artifactName}`;
         const dataDir = getDataDir();
-        const zipPath = path.join(dataDir, artifactName);
+        const stageDir = fs.mkdtempSync(path.join(dataDir, '.eca-download-'));
+        const zipPath = path.join(stageDir, artifactName);
 
-        this.onLog(`Downloading ECA server ${version} from ${downloadUrl}`);
-        await downloadFile(downloadUrl, zipPath);
+        try {
+            this.onLog(`Downloading ECA server ${version} from ${downloadUrl}`);
+            await downloadFile(downloadUrl, zipPath);
 
-        // Supply-chain integrity: verify the downloaded zip against the
-        // checksum published alongside the release. Older releases that
-        // predate checksum publication log a warning and proceed; MITM
-        // scenarios against TLS are the primary threat and HTTPS alone
-        // provides baseline protection there. See audit finding C5.
-        const expectedHash = await this.getExpectedChecksum(version, artifactName);
-        if (expectedHash) {
-            const actualHash = await sha256OfFile(zipPath);
-            if (actualHash !== expectedHash) {
-                // Remove the tainted artifact before surfacing the error
-                // so a second attempt doesn't find the bad file on disk
-                // and assume it's valid.
-                try { fs.unlinkSync(zipPath); } catch { /* noop */ }
-                throw new Error(
-                    `Checksum mismatch for ${artifactName}: expected ${expectedHash}, got ${actualHash}. ` +
-                    `Refusing to install possibly-tampered binary.`,
-                );
+            // Supply-chain integrity: verify the downloaded zip against the
+            // checksum published alongside the release. Older releases that
+            // predate checksum publication log a warning and proceed; MITM
+            // scenarios against TLS are the primary threat and HTTPS alone
+            // provides baseline protection there. See audit finding C5.
+            const expectedHash = await this.getExpectedChecksum(version, artifactName);
+            if (expectedHash) {
+                const actualHash = await sha256OfFile(zipPath);
+                if (actualHash !== expectedHash) {
+                    throw new Error(
+                        `Checksum mismatch for ${artifactName}: expected ${expectedHash}, got ${actualHash}. ` +
+                        `Refusing to install possibly-tampered binary.`,
+                    );
+                }
+                this.onLog(`Checksum OK for ${artifactName} (${actualHash.slice(0, 12)}...)`);
+            } else {
+                this.onLog(`Proceeding without checksum verification (release predates sha256sums.txt).`);
             }
-            this.onLog(`Checksum OK for ${artifactName} (${actualHash.slice(0, 12)}...)`);
-        } else {
-            this.onLog(`Proceeding without checksum verification (release predates sha256sums.txt).`);
+
+            this.onLog(`Extracting ${artifactName}...`);
+            await extractZip(zipPath, { dir: stageDir });
+
+            // Verify the expected binary actually extracted (audit: the prior
+            // implementation assumed the zip contained a file named exactly
+            // `eca` / `eca.exe` at the archive root and would chmod/spawn
+            // blindly).
+            const binaryName = os.platform() === 'win32' ? 'eca.exe' : 'eca';
+            const stagedBinary = path.join(stageDir, binaryName);
+            if (!fs.existsSync(stagedBinary)) {
+                throw new Error(`Downloaded archive did not contain expected binary: ${binaryName}`);
+            }
+
+            // Set executable permissions on non-Windows (managed binary only;
+            // a user-provided custom binary is expected to already be executable).
+            if (os.platform() !== 'win32') {
+                fs.chmodSync(stagedBinary, 0o775);
+            }
+
+            const managedBinary = this.getManagedBinaryPath();
+            try {
+                fs.renameSync(stagedBinary, managedBinary);
+            } catch {
+                // Windows can refuse to rename over a locked/running exe.
+                // Drop the old file first and retry once.
+                try { fs.unlinkSync(managedBinary); } catch { /* noop */ }
+                fs.renameSync(stagedBinary, managedBinary);
+            }
+
+            this.writeVersionFile(version);
+            this.onLog(`ECA server ${version} installed successfully`);
+        } finally {
+            // Removes the zip, extraction leftovers, and (on failure) any
+            // tainted artifact so a retry can't pick it up.
+            fs.rmSync(stageDir, { recursive: true, force: true });
         }
-
-        this.onLog(`Extracting ${artifactName}...`);
-        await extractZip(zipPath, { dir: dataDir });
-
-        // Clean up the zip file
-        fs.unlinkSync(zipPath);
-
-        // Verify the expected binary actually extracted (audit: the prior
-        // implementation assumed the zip contained a file named exactly
-        // `eca` / `eca.exe` at the archive root and would chmod/spawn
-        // blindly).
-        const managedBinary = this.getManagedBinaryPath();
-        if (!fs.existsSync(managedBinary)) {
-            throw new Error(`Extracted archive did not contain expected binary at ${managedBinary}`);
-        }
-
-        // Set executable permissions on non-Windows (managed binary only;
-        // a user-provided custom binary is expected to already be executable).
-        if (os.platform() !== 'win32') {
-            fs.chmodSync(managedBinary, 0o775);
-        }
-
-        this.writeVersionFile(version);
-        this.onLog(`ECA server ${version} installed successfully`);
     }
 
     async ensureServer(): Promise<string> {
@@ -662,18 +727,44 @@ export class EcaServer {
     /** Number of consecutive crashes since the last clean start. */
     private _restartAttempts = 0;
 
+    /**
+     * Monotonic lifecycle-ownership token, bumped at the top of every
+     * start(). Every continuation of an older start() re-checks it after
+     * each await and bails out without touching instance state when it
+     * has been superseded. This is what prevents a stale attempt from
+     * killing the process/connection of the attempt that replaced it
+     * (the root cause of self-inflicted "exited with code null" restart
+     * storms: two interleaved restart loops repeatedly SIGKILLing each
+     * other's freshly-spawned server).
+     */
+    private _generation = 0;
+
+    /** Pending auto-restart timer; at most one may exist per instance. */
+    private _restartTimer: NodeJS.Timeout | null = null;
+
     async start(workspaceFolders: { name: string; uri: string }[] = []): Promise<void> {
+        // Take lifecycle ownership. Any older start() still parked at an
+        // await observes the bump at its next checkpoint and bails out
+        // WITHOUT touching instance state — a stale attempt must never
+        // kill the current attempt's process or dispose its connection.
+        const gen = ++this._generation;
+        const checkpoint = (): void => {
+            if (gen !== this._generation) {
+                throw new Error('start attempt superseded by a newer start()');
+            }
+        };
         this._workspaceFolders = workspaceFolders;
-        // Defensive guard: a previous start() that rejected mid-flight (e.g.
-        // on `initialize` timeout — see H-1 fix below) may have left `_proc`
-        // non-null. Spawning again unconditionally would orphan that child.
-        // We fire-and-forget an explicit kill so the new start can't race
-        // against the dying previous process.
-        if (this._proc && !this._proc.killed) {
+        // A queued auto-restart is redundant now that a start is running.
+        this.clearRestartTimer();
+        // Reap a leftover process from a previous run. The close handler
+        // nulls _proc on exit, so one that is still here AND still alive
+        // (no exit code, no signal, no kill sent) is genuinely orphaned.
+        if (this._proc && !this._proc.killed
+            && this._proc.exitCode === null && this._proc.signalCode === null) {
             this.onLog('Cleaning up orphaned ECA server process before restart.');
             try { this._proc.kill('SIGKILL'); } catch { /* noop */ }
-            this._proc = null;
         }
+        this._proc = null;
         if (this._connection) {
             try { this._connection.dispose(); } catch { /* noop */ }
             this._connection = null;
@@ -687,8 +778,15 @@ export class EcaServer {
         this._lastProgressAt = 0;
         this.clearInitTimer();
 
+        // Attempt-local resources. The failure/cleanup paths below must
+        // only ever touch these — never whatever the instance fields
+        // currently point at, which may already belong to a newer attempt.
+        let proc: ChildProcess | null = null;
+        let connection: rpc.MessageConnection | null = null;
+
         try {
             const serverPath = await this.ensureServer();
+            checkpoint();
 
             // M-6 race fix: a user-initiated stop() could have landed while
             // ensureServer() was awaiting (e.g. a slow first-run download).
@@ -714,28 +812,62 @@ export class EcaServer {
                 timeoutMs: prefs?.shellEnvResolutionTimeoutMs,
                 onLog: this.onLog,
             });
+            checkpoint();
+            // Same race as M-6 above, for the shell-env await window.
+            if (this._intentionalStop) {
+                this.onLog('Start aborted — stop() was called while resolving the shell environment.');
+                this.setStatus(EcaServerStatus.Stopped);
+                return;
+            }
 
             this.onLog(`Starting ECA server: ${serverPath}`);
-            this._proc = spawn(serverPath, ['server'], {
+            const child = spawn(serverPath, ['server'], {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 env: { ...process.env, ...shellEnv },
             });
+            proc = child;
+            this._proc = child;
 
-            this._proc.stderr?.on('data', (data: Buffer) => {
+            child.stderr?.on('data', (data: Buffer) => {
                 this.onLog(data.toString().trimEnd());
             });
 
-            this._proc.on('close', (code) => {
-                this.onLog(`ECA server process exited with code ${code}`);
-                // Treat Initializing identically to Running/Starting for
+            // Rejects while `initialize` is in flight if the process dies
+            // or fails to spawn, so startup fails fast with the real cause
+            // (exit code + signal) instead of hanging for the full 30s
+            // timeout or surfacing a cryptic "connection got disposed".
+            const spawnFailure = new Promise<never>((_, reject) => {
+                child.once('close', (code, signal) => reject(new Error(
+                    `ECA server process exited during startup (code ${code}, signal ${signal ?? 'none'})`,
+                )));
+                child.once('error', (err) => reject(new Error(
+                    `ECA server process error during startup: ${err.message}`,
+                )));
+            });
+
+            child.on('close', (code, signal) => {
+                // Identity guard: a late exit from a process that is no
+                // longer the current one (killed by stop(), or replaced by
+                // a newer start) must not touch current state. It used to
+                // flip status to Failed and spawn a second, concurrent
+                // restart loop.
+                if (this._proc !== child) {
+                    this.onLog(`Detached ECA server process exited (code ${code}, signal ${signal ?? 'none'}).`);
+                    return;
+                }
+                this._proc = null;
+                this.onLog(`ECA server process exited with code ${code}${signal ? ` (signal ${signal})` : ''}`);
+                if (this._status === EcaServerStatus.Starting) {
+                    // start() is still in flight for this process; its
+                    // `spawnFailure` race rejects and the catch block owns
+                    // failure handling + restart scheduling.
+                    return;
+                }
+                // Treat Initializing identically to Running for
                 // abnormal-exit detection: a process that dies mid-init
                 // is a failure, not a clean shutdown.
-                const wasActive =
-                    this._status === EcaServerStatus.Running
-                    || this._status === EcaServerStatus.Starting
-                    || this._status === EcaServerStatus.Initializing;
-
-                if (wasActive) {
+                if (this._status === EcaServerStatus.Running
+                    || this._status === EcaServerStatus.Initializing) {
                     this.clearInitTimer();
                     this.setStatus(EcaServerStatus.Failed);
                     // Only auto-restart on unexpected exits. `stop()` sets
@@ -747,8 +879,12 @@ export class EcaServer {
                 }
             });
 
-            this._proc.on('error', (err) => {
+            child.on('error', (err) => {
+                if (this._proc !== child) return;
                 this.onLog(`ECA server process error: ${err.message}`);
+                if (this._status === EcaServerStatus.Starting) {
+                    return; // handled via `spawnFailure` in start()
+                }
                 this.clearInitTimer();
                 this.setStatus(EcaServerStatus.Failed);
                 if (!this._intentionalStop) {
@@ -756,12 +892,14 @@ export class EcaServer {
                 }
             });
 
-            this._connection = rpc.createMessageConnection(
-                new rpc.StreamMessageReader(this._proc.stdout!),
-                new rpc.StreamMessageWriter(this._proc.stdin!),
+            const conn = rpc.createMessageConnection(
+                new rpc.StreamMessageReader(child.stdout!),
+                new rpc.StreamMessageWriter(child.stdin!),
             );
+            connection = conn;
+            this._connection = conn;
 
-            this._connection.listen();
+            conn.listen();
 
             // Register notification handlers BEFORE any client→server
             // request is sent. The ECA server emits $/progress (and
@@ -770,12 +908,12 @@ export class EcaServer {
             // handler, so a handler registered later would miss them —
             // vscode-jsonrpc drops notifications with no handler at
             // the time of arrival (no buffering, no replay).
-            this.onConnectionReady(this._connection);
+            this.onConnectionReady(conn);
 
             // Hard timeout around `initialize` — a server that writes
             // garbage to stdout (e.g. a stack trace instead of JSON-RPC)
             // used to hang this promise forever. See audit finding S8.
-            const initPromise = this._connection.sendRequest('initialize', {
+            const initPromise = conn.sendRequest('initialize', {
                 processId: process.pid,
                 clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
                 capabilities: {
@@ -786,13 +924,23 @@ export class EcaServer {
                 },
                 workspaceFolders,
             });
-            const initResult = await Promise.race([
-                initPromise,
-                new Promise((_, reject) => setTimeout(
-                    () => reject(new Error(`ECA server did not respond to 'initialize' within ${SERVER_INIT_TIMEOUT_MS}ms`)),
-                    SERVER_INIT_TIMEOUT_MS,
-                )),
-            ]);
+            let initTimer: NodeJS.Timeout | undefined;
+            let initResult: unknown;
+            try {
+                initResult = await Promise.race([
+                    initPromise,
+                    spawnFailure,
+                    new Promise<never>((_, reject) => {
+                        initTimer = setTimeout(
+                            () => reject(new Error(`ECA server did not respond to 'initialize' within ${SERVER_INIT_TIMEOUT_MS}ms`)),
+                            SERVER_INIT_TIMEOUT_MS,
+                        );
+                    }),
+                ]);
+            } finally {
+                if (initTimer) clearTimeout(initTimer);
+            }
+            checkpoint();
 
             this.onLog(`ECA server initialized: ${JSON.stringify(initResult)}`);
 
@@ -810,7 +958,7 @@ export class EcaServer {
                 }
             } catch { /* version parsing best-effort */ }
 
-            this._connection.sendNotification('initialized', {});
+            conn.sendNotification('initialized', {});
 
             // At this point `initialize` has succeeded — reset the
             // restart counter so a later unrelated crash doesn't hit
@@ -839,37 +987,65 @@ export class EcaServer {
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.onLog(`Failed to start ECA server: ${message}`);
-            this.clearInitTimer();
 
             // H-1 fix: when `initialize` times out (or any other post-spawn
             // failure in this try block), the spawned `eca` child is still
             // alive holding stdio pipes open. Without an explicit kill,
             // (a) we leak a zombie process until app quit, and (b) neither
             // the `close` nor `error` handlers will fire to schedule
-            // auto-restart (the process didn't exit). Tear down explicitly,
-            // then schedule a restart if this wasn't user-initiated.
-            if (this._connection) {
-                try { this._connection.dispose(); } catch { /* noop */ }
-                this._connection = null;
+            // auto-restart (the process didn't exit).
+            //
+            // Crucially we tear down THIS attempt's resources only (the
+            // locals), never the instance fields: those may already belong
+            // to a newer attempt, and disposing/killing through them is
+            // exactly how a stale catch used to murder its successor's
+            // healthy process.
+            if (connection) {
+                try { connection.dispose(); } catch { /* noop */ }
+                if (this._connection === connection) {
+                    this._connection = null;
+                }
             }
-            if (this._proc && !this._proc.killed) {
-                try { this._proc.kill('SIGTERM'); } catch { /* noop */ }
-                // SIGKILL follow-up after a short beat so a wedged server
-                // doesn't linger. We don't await here — the start() catch
-                // path needs to throw synchronously to the caller.
-                const proc = this._proc;
-                setTimeout(() => {
-                    try { if (!proc.killed) proc.kill('SIGKILL'); } catch { /* noop */ }
-                }, SERVER_STOP_GRACE_MS);
+            if (proc) {
+                if (proc.exitCode === null && proc.signalCode === null) {
+                    try { proc.kill('SIGTERM'); } catch { /* noop */ }
+                    // SIGKILL follow-up after a short beat so a wedged
+                    // server doesn't linger. (Checked via exitCode /
+                    // signalCode, not `killed` — `killed` flips true the
+                    // moment WE send SIGTERM, which made this escalation a
+                    // permanent no-op before.)
+                    const p = proc;
+                    setTimeout(() => {
+                        try {
+                            if (p.exitCode === null && p.signalCode === null) {
+                                p.kill('SIGKILL');
+                            }
+                        } catch { /* noop */ }
+                    }, SERVER_STOP_GRACE_MS);
+                }
+                if (this._proc === proc) {
+                    this._proc = null;
+                }
             }
-            this._proc = null;
+
+            if (gen !== this._generation) {
+                // Superseded: a newer start()/stop() owns the lifecycle
+                // now. Don't touch status, don't schedule restarts, don't
+                // propagate the failure.
+                this.onLog(`Stale ECA server start attempt ended: ${message}`);
+                return;
+            }
+
+            this.onLog(`Failed to start ECA server: ${message}`);
+            this.clearInitTimer();
+
+            if (this._intentionalStop) {
+                // stop() raced this start and owns the final status.
+                return;
+            }
 
             this.setStatus(EcaServerStatus.Failed);
-
-            if (!this._intentionalStop) {
-                this.scheduleAutoRestart();
-            }
+            this.scheduleAutoRestart();
 
             throw err;
         }
@@ -881,6 +1057,11 @@ export class EcaServer {
      * persistently-broken binary doesn't spin-loop.
      */
     private scheduleAutoRestart(): void {
+        // Idempotent: one crash fans out into several failure signals
+        // (process close, connection dispose, initialize rejection); they
+        // must coalesce into a single pending restart, never parallel
+        // restart loops.
+        if (this._restartTimer) return;
         if (this._restartAttempts >= SERVER_RESTART_MAX_ATTEMPTS) {
             this.onLog(
                 `ECA server failed ${this._restartAttempts} times in a row; giving up. `
@@ -894,7 +1075,8 @@ export class EcaServer {
         this.onLog(
             `Auto-restarting ECA server in ${delay}ms (attempt ${this._restartAttempts}/${SERVER_RESTART_MAX_ATTEMPTS})...`,
         );
-        setTimeout(() => {
+        this._restartTimer = setTimeout(() => {
+            this._restartTimer = null;
             // Bail if somebody called `stop()` while we were waiting.
             if (this._intentionalStop) return;
             if (this._status === EcaServerStatus.Running
@@ -909,11 +1091,21 @@ export class EcaServer {
         }, delay);
     }
 
+    private clearRestartTimer(): void {
+        if (this._restartTimer) {
+            clearTimeout(this._restartTimer);
+            this._restartTimer = null;
+        }
+    }
+
     async stop(): Promise<void> {
         // Mark the stop as user-initiated so the `close` handler skips
         // auto-restart. Must be set BEFORE we dispose the connection /
         // kill the process to avoid a race with the close event.
         this._intentionalStop = true;
+
+        // Stopping must win over any queued recovery attempt.
+        this.clearRestartTimer();
 
         // Always clear the safety timer — even if the process was
         // already down we don't want an outstanding timeout firing

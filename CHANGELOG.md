@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- ECA server no longer self-destructs into "exited with code null" restart
+  storms: a stale start attempt could kill the process of the start that
+  superseded it, and one crash could spawn parallel restart loops. Start
+  attempts now own their resources via a generation token, failure signals
+  coalesce into a single restart timer, and exit logs include the signal.
+- Server updates no longer extract the new binary over the live one while
+  sessions are still executing it (macOS SIGKILLs a running process whose
+  executable is rewritten). Downloads stage in a temp dir and install via
+  atomic rename, single-flighted across sessions.
 - Ctrl+R / window reload no longer leaves the chat input with empty
   model, agent, and variant selectors. The session config cache was
   being overwritten by per-chat scoped `config/updated` notifications
