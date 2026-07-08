@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- Stop button now takes effect promptly during fast streaming (#11).
+  Streamed `chat/contentReceived` events are coalesced in the main process
+  and delivered as `chat/batchContentReceived` batches (~30/s), so the
+  webview no longer renders once per token and user input isn't queued
+  behind the stream.
+- Chat-scoped messages (`chat/promptStop`, tool approve/reject, steer, …)
+  are now routed to the session that owns the chat instead of the active
+  one, so stopping a chat generating in a background workspace works.
 - ECA server no longer self-destructs into "exited with code null" restart
   storms: a stale start attempt could kill the process of the start that
   superseded it, and one crash could spawn parallel restart loops. Start

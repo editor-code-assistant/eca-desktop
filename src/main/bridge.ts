@@ -10,9 +10,10 @@ import { PENDING_CHAT_ID } from './chat-state';
 import { getLogStore } from './log-store';
 import type { RouteContext } from './router';
 import { dispatch } from './router';
-import type { IpcMessage, ToolServerUpdatedParams, ChatEntry, AskQuestionResult } from './protocol';
+import type { IpcMessage, ToolServerUpdatedParams, ChatEntry, ChatContentReceivedParams, AskQuestionResult } from './protocol';
 import * as rpc from './rpc';
 import type { SessionManager, Session } from './session-manager';
+import { CONTENT_BATCH_MS, CONTENT_BATCH_MAX_EVENTS } from './constants';
 
 // Track MCP server, config and providers state per session. Cleaned up
 // in `dropSessionCaches` when a session is removed, so long-running
@@ -91,10 +92,67 @@ export function createBridge(
 
     // ── Helper: send to renderer ──
 
-    function sendToRenderer(type: string, data: unknown): void {
+    function rawSendToRenderer(type: string, data: unknown): void {
         if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('server-message', { type, data });
         }
+    }
+
+    // ── Content-event coalescing (issue #11) ──
+    //
+    // High-frequency `chat/contentReceived` notifications are buffered
+    // and flushed as a single `chat/batchContentReceived` — a message
+    // the webview already consumes with one Redux dispatch / one React
+    // render (it powers rehydration). This keeps the renderer's main
+    // thread responsive during fast streaming so user input (e.g. the
+    // Stop button) is processed promptly instead of queueing behind
+    // one render per streamed token.
+    //
+    // Ordering: every non-content send flushes the buffer first, so a
+    // `chat/statusChanged`, `chat/askQuestion`, etc. can never overtake
+    // content that arrived before it. Order within the buffer is
+    // arrival order, and the webview's batch reducer applies events
+    // sequentially — identical semantics to per-event delivery.
+    let pendingContentEvents: ChatContentReceivedParams[] = [];
+    let contentFlushTimer: NodeJS.Timeout | null = null;
+
+    function flushContentEvents(): void {
+        if (contentFlushTimer) {
+            clearTimeout(contentFlushTimer);
+            contentFlushTimer = null;
+        }
+        if (pendingContentEvents.length === 0) return;
+        const batch = pendingContentEvents;
+        pendingContentEvents = [];
+        rawSendToRenderer('chat/batchContentReceived', batch);
+    }
+
+    // Rehydration replays the FULL `chatState.contentEvents` cache, and
+    // every buffered event has already been pushed to that cache by the
+    // `chat/contentReceived` notification handler. Flushing the buffer
+    // into a page that is about to be rehydrated would apply those
+    // events twice (the webview's replay path doesn't reset messages),
+    // so both rehydration paths discard the buffer instead.
+    function discardPendingContentEvents(): void {
+        if (contentFlushTimer) {
+            clearTimeout(contentFlushTimer);
+            contentFlushTimer = null;
+        }
+        pendingContentEvents = [];
+    }
+
+    function sendToRenderer(type: string, data: unknown): void {
+        if (type === 'chat/contentReceived') {
+            pendingContentEvents.push(data as ChatContentReceivedParams);
+            if (pendingContentEvents.length >= CONTENT_BATCH_MAX_EVENTS) {
+                flushContentEvents();
+            } else if (!contentFlushTimer) {
+                contentFlushTimer = setTimeout(flushContentEvents, CONTENT_BATCH_MS);
+            }
+            return;
+        }
+        flushContentEvents();
+        rawSendToRenderer(type, data);
     }
 
     function sendChatListUpdate(): void {
@@ -122,6 +180,10 @@ export function createBridge(
     // ── Rehydration on reload ──
 
     mainWindow.webContents.on('did-finish-load', () => {
+        // The page was just (re)loaded — anything still buffered will be
+        // replayed from the rehydration cache below; see
+        // discardPendingContentEvents.
+        discardPendingContentEvents();
         const activeSession = getActiveSession();
         if (activeSession) {
             sendToRenderer('server/statusChanged', activeSession.ecaServer.status);
@@ -449,7 +511,17 @@ export function createBridge(
             return;
         }
 
-        const session = getActiveSession();
+        // Route chat-scoped messages to the session that OWNS the chat,
+        // falling back to the active session (covers brand-new chats whose
+        // client-minted id no session knows yet, and non-chat messages).
+        // With multiple workspaces open, a `chat/promptStop` (or tool
+        // approve/reject/steer) for a chat generating in a background
+        // session must reach THAT session's server — the active one would
+        // silently no-op it since it doesn't know the chatId (issue #11).
+        const msgChatId = (message.data as { chatId?: unknown } | undefined)?.chatId;
+        const session = (typeof msgChatId === 'string'
+            ? sessionManager.getSessionForChat(msgChatId)
+            : undefined) ?? getActiveSession();
         const conn = session?.ecaServer.connection ?? null;
 
         if (!conn) {
@@ -479,6 +551,11 @@ export function createBridge(
                 // guaranteed attached by the time this lands. That's the
                 // silent race the `did-finish-load` path is subject to,
                 // which is why selectors came back empty after Ctrl+R.
+                //
+                // Drop (don't flush) any buffered content events first —
+                // they are already in the rehydration cache replayed
+                // below, and flushing them here would double-apply them.
+                discardPendingContentEvents();
                 sendSessionContext(session!);
                 session!.chatState.rehydrate(sendToRenderer, [session!.workspaceFolder]);
                 // After the chats are open in the webview, replay any

@@ -118,6 +118,21 @@ export const HTTP_MAX_RETRIES = 3;
 export const HTTP_RETRY_DELAY_MS = 1_000;
 export const HTTP_RETRY_BACKOFF_FACTOR = 2;
 
+// ── Renderer content batching ──
+
+// While the model streams, the server emits one `chat/contentReceived`
+// notification per delta. Forwarding each as its own IPC message used to
+// cost the renderer two structured clones plus a Redux dispatch and a
+// full React render per token, saturating its main thread — clicks (like
+// the Stop button, issue #11) then sat in the input queue for seconds.
+// The bridge instead coalesces content events and flushes them as a
+// single `chat/batchContentReceived` (one Immer draft, one render) every
+// CONTENT_BATCH_MS, or sooner if the buffer reaches
+// CONTENT_BATCH_MAX_EVENTS. ~30 flushes/sec is imperceptible for
+// streaming text while cutting renderer work by an order of magnitude.
+export const CONTENT_BATCH_MS = 33;
+export const CONTENT_BATCH_MAX_EVENTS = 200;
+
 // ── Server lifecycle ──
 
 // Hard deadline for the `initialize` JSON-RPC round-trip. If the spawned

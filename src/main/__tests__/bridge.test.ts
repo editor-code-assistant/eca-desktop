@@ -50,8 +50,33 @@ vi.mock('../server', () => ({
 }));
 
 import { createBridge, dropSessionCaches } from '../bridge';
+import { CONTENT_BATCH_MS, CONTENT_BATCH_MAX_EVENTS } from '../constants';
 
 // ── Test doubles ──
+
+/**
+ * Minimal stand-in for a vscode-jsonrpc MessageConnection. Records the
+ * notification/request handlers the bridge registers (keyed by the rpc
+ * type's `.method`) so tests can invoke them as if the server had sent
+ * the notification.
+ */
+function makeFakeConnection() {
+    const notificationHandlers = new Map<string, (params: never) => void>();
+    return {
+        onNotification: (type: { method: string }, handler: (params: never) => void): void => {
+            notificationHandlers.set(type.method, handler);
+        },
+        onRequest: vi.fn(),
+        sendRequest: vi.fn(async () => ({})),
+        sendNotification: vi.fn(),
+        /** Fire a fake server notification by method name. */
+        notify: (method: string, params: unknown): void => {
+            const handler = notificationHandlers.get(method);
+            if (!handler) throw new Error(`no handler registered for ${method}`);
+            handler(params as never);
+        },
+    };
+}
 
 interface FakeSession {
     id: string;
@@ -63,9 +88,17 @@ interface FakeSession {
     };
     chatState: {
         rehydrate: ReturnType<typeof vi.fn>;
-        getChatListUpdate: () => { entries: unknown[]; selectedId: null };
+        getChatListUpdate: () => { entries: { id: string }[]; selectedId: null };
         removePendingChat: ReturnType<typeof vi.fn>;
         addPendingNewChat: ReturnType<typeof vi.fn>;
+        pushContentEvent: ReturnType<typeof vi.fn>;
+        markAsSubagent: ReturnType<typeof vi.fn>;
+        isSubagent: () => boolean;
+        addOrUpdateEntry: ReturnType<typeof vi.fn>;
+        updateStatus: ReturnType<typeof vi.fn>;
+        markToolCallWaitingApproval: ReturnType<typeof vi.fn>;
+        markToolCallNotWaitingApproval: ReturnType<typeof vi.fn>;
+        cachePayload: ReturnType<typeof vi.fn>;
         selectedChatId: string | null;
     };
 }
@@ -84,6 +117,14 @@ function makeFakeSession(id = 's-1'): FakeSession {
             getChatListUpdate: () => ({ entries: [], selectedId: null }),
             removePendingChat: vi.fn(),
             addPendingNewChat: vi.fn(),
+            pushContentEvent: vi.fn(),
+            markAsSubagent: vi.fn(),
+            isSubagent: () => false,
+            addOrUpdateEntry: vi.fn(),
+            updateStatus: vi.fn(),
+            markToolCallWaitingApproval: vi.fn(),
+            markToolCallNotWaitingApproval: vi.fn(),
+            cachePayload: vi.fn(),
             selectedChatId: null,
         },
     };
@@ -291,6 +332,140 @@ describe('bridge', () => {
             expect(typeof api.sendSessionListUpdate).toBe('function');
             expect(typeof api.sendChatListUpdate).toBe('function');
             expect(typeof api.loadSessionChats).toBe('function');
+        });
+    });
+
+    describe('content-event batching (issue #11)', () => {
+        function serverMessages(mainWindow: ReturnType<typeof makeFakeMainWindow>): { type: string; data: unknown }[] {
+            return mainWindow.webContents.send.mock.calls
+                .filter(([channel]) => channel === 'server-message')
+                .map(([, payload]) => payload as { type: string; data: unknown });
+        }
+
+        function contentEvent(i: number): unknown {
+            return { chatId: 'c-1', role: 'assistant', content: { type: 'text', text: `t${i}` } };
+        }
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        function setup() {
+            const session = makeFakeSession('s-1');
+            const conn = makeFakeConnection();
+            session.ecaServer.connection = conn;
+            const sessionManager = makeFakeSessionManager([session]);
+            const mainWindow = makeFakeMainWindow(1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const bridge = createBridge(mainWindow as any, sessionManager as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            bridge.registerServerNotifications(session as any);
+            return { session, conn, mainWindow };
+        }
+
+        it('coalesces a burst of chat/contentReceived into one chat/batchContentReceived', () => {
+            const { conn, mainWindow } = setup();
+
+            for (let i = 0; i < 5; i++) {
+                conn.notify('chat/contentReceived', contentEvent(i));
+            }
+
+            // Nothing forwarded yet — the flush timer is pending.
+            expect(serverMessages(mainWindow)).toHaveLength(0);
+
+            vi.advanceTimersByTime(CONTENT_BATCH_MS + 1);
+
+            const msgs = serverMessages(mainWindow);
+            expect(msgs).toHaveLength(1);
+            expect(msgs[0].type).toBe('chat/batchContentReceived');
+            expect(msgs[0].data).toHaveLength(5);
+        });
+
+        it('flushes buffered content before any other message so ordering is preserved', () => {
+            const { conn, mainWindow } = setup();
+
+            conn.notify('chat/contentReceived', contentEvent(0));
+            conn.notify('chat/contentReceived', contentEvent(1));
+            conn.notify('chat/statusChanged', { chatId: 'c-1', status: 'idle' });
+
+            const msgs = serverMessages(mainWindow);
+            expect(msgs.map((m) => m.type)).toEqual([
+                'chat/batchContentReceived',
+                'chat/statusChanged',
+            ]);
+            expect(msgs[0].data).toHaveLength(2);
+        });
+
+        it('flushes immediately when the buffer reaches CONTENT_BATCH_MAX_EVENTS', () => {
+            const { conn, mainWindow } = setup();
+
+            for (let i = 0; i < CONTENT_BATCH_MAX_EVENTS; i++) {
+                conn.notify('chat/contentReceived', contentEvent(i));
+            }
+
+            // No timer advance needed — the cap forces the flush.
+            const msgs = serverMessages(mainWindow);
+            expect(msgs).toHaveLength(1);
+            expect(msgs[0].type).toBe('chat/batchContentReceived');
+            expect(msgs[0].data).toHaveLength(CONTENT_BATCH_MAX_EVENTS);
+        });
+
+        it('drops the buffer on did-finish-load instead of double-applying via rehydrate', () => {
+            const { conn, mainWindow } = setup();
+
+            conn.notify('chat/contentReceived', contentEvent(0));
+            mainWindow.webContents.emit('did-finish-load');
+            vi.advanceTimersByTime(CONTENT_BATCH_MS + 1);
+
+            // The buffered event must NOT surface as a live batch — it is
+            // already part of the rehydration cache replayed by rehydrate().
+            const batches = serverMessages(mainWindow)
+                .filter((m) => m.type === 'chat/batchContentReceived');
+            expect(batches).toHaveLength(0);
+        });
+    });
+
+    describe('chat-scoped session routing', () => {
+        it('routes chat/promptStop to the session that owns the chat, not the active one', async () => {
+            const active = makeFakeSession('s-active');
+            const owner = makeFakeSession('s-owner');
+            const ownerConn = makeFakeConnection();
+            owner.ecaServer.connection = ownerConn;
+            const sessionManager = makeFakeSessionManager([active, owner]);
+            sessionManager.activeSessionId = 's-active';
+            sessionManager.getSessionForChat = (chatId: string) =>
+                chatId === 'chat-b' ? owner : undefined;
+            const mainWindow = makeFakeMainWindow(1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            createBridge(mainWindow as any, sessionManager as any);
+
+            const handler = ipcHandlers.get('webview-message')!;
+            await handler({ sender: { id: 1 } }, { type: 'chat/promptStop', data: { chatId: 'chat-b' } });
+
+            expect(dispatchMock).toHaveBeenCalledOnce();
+            const ctx = (dispatchMock.mock.calls[0] as unknown[])[0] as { conn: unknown };
+            expect(ctx.conn).toBe(ownerConn);
+        });
+
+        it('falls back to the active session for unknown chat ids', async () => {
+            const active = makeFakeSession('s-active');
+            const activeConn = makeFakeConnection();
+            active.ecaServer.connection = activeConn;
+            const sessionManager = makeFakeSessionManager([active]);
+            const mainWindow = makeFakeMainWindow(1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            createBridge(mainWindow as any, sessionManager as any);
+
+            const handler = ipcHandlers.get('webview-message')!;
+            await handler({ sender: { id: 1 } }, { type: 'chat/promptStop', data: { chatId: 'brand-new-uuid' } });
+
+            expect(dispatchMock).toHaveBeenCalledOnce();
+            const ctx = (dispatchMock.mock.calls[0] as unknown[])[0] as { conn: unknown };
+            expect(ctx.conn).toBe(activeConn);
         });
     });
 });
