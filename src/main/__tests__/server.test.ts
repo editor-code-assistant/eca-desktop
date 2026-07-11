@@ -257,8 +257,44 @@ describe('EcaServer', () => {
 
     describe('getExpectedChecksum', () => {
         const artifact = 'eca-native-static-linux-amd64.zip';
+        const hex64 = 'cafebabe'.repeat(8); // 64 hex chars
+
+        // The per-artifact `<artifact>.sha256` fetch now precedes the
+        // sha256sums.txt fallback. A successful-but-garbage response is
+        // the cheapest way to reach the fallback in tests without
+        // driving the 404 retry loop's backoff timers.
+        const artifactShaMiss = (): void => {
+            configureHttpsOnce({ body: 'not a checksum' });
+        };
+
+        it('returns the digest from the per-artifact .sha256 asset', async () => {
+            configureHttpsOnce({ body: `${hex64.toUpperCase()}\n` });
+            const s = new EcaServer();
+            await expect(s.getExpectedChecksum('v0.6.0', artifact))
+                .resolves.toBe(hex64);
+        });
+
+        it('tolerates `hex  filename` format in the per-artifact asset', async () => {
+            configureHttpsOnce({ body: `${hex64}  ${artifact}\n` });
+            const s = new EcaServer();
+            await expect(s.getExpectedChecksum('v0.6.0', artifact))
+                .resolves.toBe(hex64);
+        });
+
+        it('falls back to sha256sums.txt when the artifact asset is missing', async () => {
+            vi.useFakeTimers();
+            // The .sha256 fetch 404s through its whole retry budget first.
+            for (let i = 0; i < HTTP_MAX_RETRIES + 1; i++) {
+                configureHttpsOnce({ statusCode: 404 });
+            }
+            configureHttpsOnce({ body: `abc123  ${artifact}\n` });
+            const s = new EcaServer();
+            const promise = s.getExpectedChecksum('v0.6.0', artifact);
+            await expect(awaitWithFakeTimers(promise)).resolves.toBe('abc123');
+        });
 
         it('parses `hex  filename` lines and returns the lowercased hex', async () => {
+            artifactShaMiss();
             configureHttpsOnce({
                 body: [
                     'deadbeef  eca-native-macos-amd64.zip',
@@ -272,6 +308,7 @@ describe('EcaServer', () => {
         });
 
         it('ignores # comments and blank lines', async () => {
+            artifactShaMiss();
             configureHttpsOnce({
                 body: [
                     '# ECA checksums',
@@ -286,6 +323,7 @@ describe('EcaServer', () => {
         });
 
         it('tolerates GNU `*filename` binary-mode marker', async () => {
+            artifactShaMiss();
             configureHttpsOnce({
                 body: `abc  *${artifact}\n`,
             });
@@ -295,6 +333,7 @@ describe('EcaServer', () => {
         });
 
         it('returns null when the artifact is not listed', async () => {
+            artifactShaMiss();
             configureHttpsOnce({
                 body: 'deadbeef  some-other-file.zip\n',
             });
@@ -302,7 +341,7 @@ describe('EcaServer', () => {
             await expect(s.getExpectedChecksum('v0.6.0', artifact)).resolves.toBeNull();
         });
 
-        it('returns null after exhausting retries when the sha256sums.txt fetch fails', async () => {
+        it('returns null after exhausting retries when no checksum asset exists', async () => {
             vi.useFakeTimers();
             configureHttpsAlways({ statusCode: 404 });
             const s = new EcaServer();
@@ -311,23 +350,25 @@ describe('EcaServer', () => {
             const promise = s.getExpectedChecksum('v0.6.0', artifact);
             await expect(awaitWithFakeTimers(promise)).resolves.toBeNull();
             expect(logs.some((m) => /No sha256sums\.txt/i.test(m))).toBe(true);
-            // Verify the retry budget was honoured before giving up.
-            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
+            // Both the per-artifact and the aggregate fetch honour the
+            // retry budget before giving up.
+            expect(mockHttpsGet).toHaveBeenCalledTimes(2 * (HTTP_MAX_RETRIES + 1));
         });
 
-        it('retries the sha256sums.txt fetch on transient failure and succeeds', async () => {
+        it('retries the artifact checksum fetch on transient failure and succeeds', async () => {
             vi.useFakeTimers();
-            // First attempt blips, second returns the checksum file.
+            // First attempt blips, second returns the digest.
             configureHttpsOnce({ requestError: new Error('ETIMEDOUT') });
-            configureHttpsOnce({ body: `abc123  ${artifact}\n` });
+            configureHttpsOnce({ body: `${hex64}\n` });
             const s = new EcaServer();
             const promise = s.getExpectedChecksum('v0.6.0', artifact);
             await vi.runAllTimersAsync();
-            await expect(promise).resolves.toBe('abc123');
+            await expect(promise).resolves.toBe(hex64);
             expect(mockHttpsGet).toHaveBeenCalledTimes(2);
         });
 
         it('skips malformed lines (single-token)', async () => {
+            artifactShaMiss();
             configureHttpsOnce({
                 body: [
                     'orphan-token',

@@ -510,12 +510,25 @@ export class EcaServer {
 
     /**
      * Fetch the expected SHA-256 hex digest for `artifactName` at
-     * `version`. Looks for a conventional `sha256sums.txt` asset on the
-     * release (lines of the form `<hex>  <filename>`); returns null if
-     * the release predates checksum publishing so first-launch doesn't
-     * hard-fail against older releases.
+     * `version`. ECA releases publish per-artifact `<artifact>.sha256`
+     * assets (bare hex digest), which is tried first; falls back to a
+     * conventional `sha256sums.txt` aggregate (lines of the form
+     * `<hex>  <filename>`). Returns null when neither is available so
+     * first-launch doesn't hard-fail against releases without checksums.
      */
     async getExpectedChecksum(version: string, artifactName: string): Promise<string | null> {
+        // Per-artifact asset: this is what eca releases actually publish.
+        // The previous sha256sums.txt-only lookup 404ed on every release,
+        // silently disabling verification.
+        try {
+            const artifactBody = await fetchText(`${GITHUB_RELEASES_DOWNLOAD}/${version}/${artifactName}.sha256`);
+            const hex = artifactBody.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+            if (/^[0-9a-f]{64}$/.test(hex)) return hex;
+            this.onLog(`Unexpected content in ${artifactName}.sha256; trying sha256sums.txt.`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.onLog(`No ${artifactName}.sha256 found for ${version} (${message}); trying sha256sums.txt.`);
+        }
         const checksumUrl = `${GITHUB_RELEASES_DOWNLOAD}/${version}/sha256sums.txt`;
         let body: string;
         try {
@@ -547,6 +560,17 @@ export class EcaServer {
         } catch {
             return '';
         }
+    }
+
+    /**
+     * Drop the managed binary and its version marker so the next start
+     * re-downloads a fresh copy. Used when the cached binary proves
+     * unusable at runtime (e.g. SIGKILLed by macOS for a broken code
+     * signature) — retrying it would fail identically forever.
+     */
+    private invalidateManagedBinary(): void {
+        try { fs.rmSync(path.join(getDataDir(), 'eca-version'), { force: true }); } catch { /* best-effort */ }
+        try { fs.rmSync(this.getManagedBinaryPath(), { force: true }); } catch { /* best-effort */ }
     }
 
     writeVersionFile(version: string): void {
@@ -628,7 +652,7 @@ export class EcaServer {
                 }
                 this.onLog(`Checksum OK for ${artifactName} (${actualHash.slice(0, 12)}...)`);
             } else {
-                this.onLog(`Proceeding without checksum verification (release predates sha256sums.txt).`);
+                this.onLog(`Proceeding without checksum verification (no checksum asset found for this release).`);
             }
 
             this.onLog(`Extracting ${artifactName}...`);
@@ -1042,6 +1066,25 @@ export class EcaServer {
             if (this._intentionalStop) {
                 // stop() raced this start and owns the final status.
                 return;
+            }
+
+            // A darwin SIGKILL during startup is the fingerprint of a binary
+            // failing macOS code-signature validation (e.g. a corrupted
+            // download). Retrying the same file would fail identically until
+            // the attempt ceiling, so drop the cache and let the auto-restart
+            // re-download a fresh binary instead. exitCode/signalCode are
+            // already populated here: `spawnFailure` rejects from the 'close'
+            // event, which fires after they are set.
+            if (process.platform === 'darwin'
+                && !this.getCustomBinaryPath()
+                && proc
+                && (proc.signalCode === 'SIGKILL' || proc.exitCode === 137)) {
+                this.onLog(
+                    'ECA server was SIGKILLed during startup, likely failing macOS '
+                    + 'code-signature validation; invalidating the cached binary so '
+                    + 'the next attempt downloads a fresh one.',
+                );
+                this.invalidateManagedBinary();
             }
 
             this.setStatus(EcaServerStatus.Failed);
