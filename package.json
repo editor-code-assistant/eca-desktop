@@ -53,6 +53,7 @@
   "overrides": {
     "axios": "^1.15.2",
     "@xmldom/xmldom": "^0.8.13",
-    "ip-address": "^10.1.1"
+    "ip-address": "^10.1.1",
+    "yauzl": "^3.4.0"
   }
 }
