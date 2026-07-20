@@ -1,51 +1,75 @@
-name: CI
+name: Desktop CI
 
 on:
   push:
-    branches: [master]
   pull_request:
-    branches: [master]
-  workflow_dispatch: {}
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  # Cancel superseded runs on the same PR / branch to save CI minutes.
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: desktop-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint-and-build:
+  validate:
+    name: Validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
 
     steps:
-      - name: Checkout
+      - name: Check out repository and webview
         uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
             package-lock.json
             eca-webview/package-lock.json
 
-      - name: Install dependencies
+      - name: Install desktop dependencies
         run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint
+      - name: Lint without warnings
         run: npm run lint
 
-      - name: Build
+      - name: Run unit tests
+        run: npm test
+
+      - name: Audit desktop dependencies
+        run: npm audit
+
+      - name: Audit webview dependencies
+        run: npm audit --prefix eca-webview
+
+      - name: Build desktop and webview
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run Electron end-to-end tests
+        if: runner.os != 'Linux'
+        run: npm run test:e2e:run
+
+      - name: Run Electron end-to-end tests under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run test:e2e:run
+
+      - name: Smoke-package Windows x64 application
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win --x64 --dir --publish never

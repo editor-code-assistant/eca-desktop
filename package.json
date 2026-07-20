@@ -40,6 +40,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "test:e2e:run": "playwright test",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win --x64 --publish never",
     "package:win:dir": "npm run build && electron-builder --win --x64 --dir --publish never",
