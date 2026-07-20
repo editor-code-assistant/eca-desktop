@@ -429,6 +429,102 @@ describe('bridge', () => {
         });
     });
 
+    describe('sessionless webview startup', () => {
+        it('accepts webview readiness before any workspace exists', async () => {
+            const sessionManager = makeFakeSessionManager([]);
+            const mainWindow = makeFakeMainWindow(1);
+            createBridge(
+                mainWindow as unknown as Parameters<typeof createBridge>[0],
+                sessionManager as unknown as Parameters<typeof createBridge>[1],
+            );
+            const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            await ipcHandlers.get('webview-message')!(
+                { sender: { id: 1 } },
+                { type: 'webview/ready', data: {} },
+            );
+
+            expect(error).not.toHaveBeenCalled();
+            expect(dispatchMock).not.toHaveBeenCalled();
+            expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+                'session-list-update',
+                { sessions: [], activeSessionId: null },
+            );
+            expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+                'chat-list-update',
+                { entries: [], selectedId: null, activeWorkspaceFolderName: null },
+            );
+        });
+
+        it('rehydrates local session state before the server connects', async () => {
+            const session = makeFakeSession();
+            session.ecaServer.status = 'Starting';
+            session.ecaServer.connection = null;
+            const sessionManager = makeFakeSessionManager([session]);
+            const mainWindow = makeFakeMainWindow(1);
+            createBridge(
+                mainWindow as unknown as Parameters<typeof createBridge>[0],
+                sessionManager as unknown as Parameters<typeof createBridge>[1],
+            );
+            const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            await ipcHandlers.get('webview-message')!(
+                { sender: { id: 1 } },
+                { type: 'webview/ready', data: {} },
+            );
+
+            expect(error).not.toHaveBeenCalled();
+            expect(session.chatState.rehydrate).toHaveBeenCalledOnce();
+            expect(dispatchMock).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['chat/queryContext', 'contexts'],
+            ['chat/queryCommands', 'commands'],
+            ['chat/queryFiles', 'files'],
+        ] as const)('returns an empty %s response without a connection', async (type, resultKey) => {
+            const sessionManager = makeFakeSessionManager([]);
+            const mainWindow = makeFakeMainWindow(1);
+            createBridge(
+                mainWindow as unknown as Parameters<typeof createBridge>[0],
+                sessionManager as unknown as Parameters<typeof createBridge>[1],
+            );
+            const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            await ipcHandlers.get('webview-message')!(
+                { sender: { id: 1 } },
+                { type, data: { requestId: 'request-1' } },
+            );
+
+            expect(error).not.toHaveBeenCalled();
+            expect(dispatchMock).not.toHaveBeenCalled();
+            expect(mainWindow.webContents.send).toHaveBeenCalledWith('server-message', {
+                type,
+                data: { [resultKey]: [], requestId: 'request-1' },
+            });
+        });
+
+        it('still reports server-dependent commands without a connection', async () => {
+            const sessionManager = makeFakeSessionManager([]);
+            const mainWindow = makeFakeMainWindow(1);
+            createBridge(
+                mainWindow as unknown as Parameters<typeof createBridge>[0],
+                sessionManager as unknown as Parameters<typeof createBridge>[1],
+            );
+            const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            await ipcHandlers.get('webview-message')!(
+                { sender: { id: 1 } },
+                { type: 'chat/userPrompt', data: { text: 'hello' } },
+            );
+
+            expect(error).toHaveBeenCalledWith(
+                '[Bridge] No active server connection, dropping message:',
+                'chat/userPrompt',
+            );
+        });
+    });
+
     describe('chat-scoped session routing', () => {
         it('routes chat/promptStop to the session that owns the chat, not the active one', async () => {
             const active = makeFakeSession('s-active');

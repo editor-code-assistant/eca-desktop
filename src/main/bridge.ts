@@ -524,12 +524,50 @@ export function createBridge(
             : undefined) ?? getActiveSession();
         const conn = session?.ecaServer.connection ?? null;
 
+        // `webview/ready` is a renderer lifecycle message, not an RPC call.
+        // It is valid while the welcome screen has no session and can also
+        // race with the server connection during workspace startup.
+        if (message.type === 'webview/ready') {
+            discardPendingContentEvents();
+            if (session) {
+                sendSessionContext(session);
+                session.chatState.rehydrate(sendToRenderer, [session.workspaceFolder]);
+                const perChatConfigs = perChatConfigCache.get(session.id);
+                if (perChatConfigs) {
+                    for (const config of perChatConfigs.values()) {
+                        sendToRenderer('config/updated', config);
+                    }
+                }
+            }
+            sendChatListUpdate();
+            sendSessionListUpdate();
+            return;
+        }
+
         if (!conn) {
+            // Autocomplete requests are valid before a workspace exists or
+            // while its server is connecting. Resolve them with the same empty
+            // payload shapes used by router failure paths.
+            const requestId = typeof message.data.requestId === 'string'
+                ? message.data.requestId
+                : undefined;
+            if (message.type === 'chat/queryContext') {
+                sendToRenderer('chat/queryContext', { contexts: [], requestId });
+                return;
+            }
+            if (message.type === 'chat/queryCommands') {
+                sendToRenderer('chat/queryCommands', { commands: [], requestId });
+                return;
+            }
+            if (message.type === 'chat/queryFiles') {
+                sendToRenderer('chat/queryFiles', { files: [], requestId });
+                return;
+            }
             console.error('[Bridge] No active server connection, dropping message:', message.type);
             return;
         }
 
-        if (session!.ecaServer.status !== EcaServerStatus.Running && message.type !== 'webview/ready') {
+        if (session!.ecaServer.status !== EcaServerStatus.Running) {
             console.warn('[Bridge] Server not ready, dropping message:', message.type);
             return;
         }
@@ -543,39 +581,6 @@ export function createBridge(
         };
 
         try {
-            if (message.type === 'webview/ready') {
-                // Full rehydration on every webview load — covers fresh
-                // mount AND Ctrl+R / window.location.reload(). Fires
-                // from a React useEffect, so the renderer's
-                // `window.addEventListener('message', …)` handlers are
-                // guaranteed attached by the time this lands. That's the
-                // silent race the `did-finish-load` path is subject to,
-                // which is why selectors came back empty after Ctrl+R.
-                //
-                // Drop (don't flush) any buffered content events first —
-                // they are already in the rehydration cache replayed
-                // below, and flushing them here would double-apply them.
-                discardPendingContentEvents();
-                sendSessionContext(session!);
-                session!.chatState.rehydrate(sendToRenderer, [session!.workspaceFolder]);
-                // After the chats are open in the webview, replay any
-                // per-chat `config/updated` overrides so each chat's
-                // selectedModel / selectTrust survives the reload. The
-                // applyConfigToChat reducer is a no-op for chats that
-                // aren't in the slice yet, so order vs. rehydrate is
-                // safe either way — we replay after to minimise wasted
-                // work on chats the user never opened.
-                const perChatConfigs = perChatConfigCache.get(session!.id);
-                if (perChatConfigs) {
-                    for (const config of perChatConfigs.values()) {
-                        sendToRenderer('config/updated', config);
-                    }
-                }
-                sendChatListUpdate();
-                sendSessionListUpdate();
-                return;
-            }
-
             // Handle chat/answerQuestion locally — resolve the pending promise
             if (message.type === 'chat/answerQuestion') {
                 const { requestId, answer, cancelled } = message.data as {
