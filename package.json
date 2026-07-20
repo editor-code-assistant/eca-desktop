@@ -31,7 +31,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder",
     "start": "node dist/launch-electron.js .",
     "package:mac": "npm run build && electron-builder --mac",
@@ -45,6 +45,7 @@
     "vscode-jsonrpc": "^8.2.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@types/follow-redirects": "^1.13.0",
     "@types/node": "^24.13.3",
     "concurrently": "^10.0.3",

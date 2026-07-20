@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 release/
+playwright-report/
+test-results/
 src/renderer/sidebar.js
 src/renderer/welcome.js
 src/renderer/preferences.js

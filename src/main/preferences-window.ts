@@ -7,7 +7,7 @@ import path from 'path';
 
 // See src/main/menu.ts and code-review M-1 — switched from NODE_ENV to
 // `app.isPackaged` so `npm run dev` reliably opens DevTools on this window.
-const IS_DEV = !app.isPackaged;
+const IS_DEV = !app.isPackaged && process.env.ECA_E2E !== '1';
 
 let prefsWindow: BrowserWindow | null = null;
 

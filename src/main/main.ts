@@ -20,7 +20,8 @@ import { resolveShellEnv } from './shell-env';
 // fixes the dev-mode regression where the `"dev"` npm script never exports
 // NODE_ENV and thus lost dev-only affordances (DevTools menu, etc.).
 // See code-review M-1.
-const IS_DEV = !app.isPackaged;
+const IS_E2E = process.env.ECA_E2E === '1';
+const IS_DEV = !app.isPackaged && !IS_E2E;
 
 // In dev mode the webview is served by a live Vite dev server (default
 // `http://localhost:5173`). The URL is env-overridable so a single
@@ -485,7 +486,7 @@ async function main(): Promise<void> {
     }
   });
 
-  if (!IS_DEV) {
+  if (!IS_DEV && !IS_E2E) {
     setupAutoUpdater(mainWindow);
   }
 
@@ -497,7 +498,7 @@ async function main(): Promise<void> {
   // We now walk the renderer directory and watch each subdirectory
   // individually, which works uniformly across macOS / Linux / Windows
   // without adding a chokidar dependency to the runtime bundle.
-  if (!app.isPackaged) {
+  if (IS_DEV) {
     const fs = require('fs');
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
     const activeWatchers: Array<ReturnType<typeof fs.watch>> = [];

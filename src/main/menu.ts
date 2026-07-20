@@ -56,6 +56,7 @@ export function createMenu(mainWindow: BrowserWindow, actions: MenuActions) {
                 { role: 'about' as const },
                 { type: 'separator' as const },
                 {
+                    id: 'preferences',
                     label: 'Preferences…',
                     accelerator: 'Cmd+,',
                     click: () => openPreferencesWindow(mainWindow),
@@ -115,6 +116,7 @@ export function createMenu(mainWindow: BrowserWindow, actions: MenuActions) {
                 ...(isMac ? [] : [
                     { type: 'separator' as const },
                     {
+                        id: 'preferences',
                         label: 'Preferences…',
                         accelerator: 'Ctrl+,',
                         click: () => openPreferencesWindow(mainWindow),
@@ -171,6 +173,7 @@ export function createMenu(mainWindow: BrowserWindow, actions: MenuActions) {
                 { role: 'togglefullscreen' },
                 { type: 'separator' },
                 {
+                    id: 'open-settings-page',
                     label: 'Open Settings Page',
                     accelerator: 'CmdOrCtrl+Shift+,',
                     click: () => sendWebview('navigateTo', { path: '/settings' }),
