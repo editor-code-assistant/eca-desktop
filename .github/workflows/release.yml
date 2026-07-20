@@ -32,6 +32,8 @@ jobs:
             platform: mac
           - os: ubuntu-latest
             platform: linux
+          - os: windows-latest
+            platform: win
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -51,11 +53,23 @@ jobs:
             eca-webview/package-lock.json
 
       - name: Cache electron & electron-builder downloads
+        if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Cache electron & electron-builder downloads (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
@@ -108,6 +122,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Package & Publish (Windows)
+        if: matrix.platform == 'win'
+        # Unsigned for now (SmartScreen will warn on first run). When a Windows
+        # signing cert is available, mirror the conditional CSC_LINK pattern
+        # used for macOS above.
+        run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: List produced artifacts
         shell: bash
         run: ls -la release/
@@ -120,6 +143,7 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.deb
+            release/*.exe
 
   publish-release:
     needs: release

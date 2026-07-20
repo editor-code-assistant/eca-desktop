@@ -39,6 +39,18 @@ deb:
   fpm:
     - "--after-install=build/linux-after-install.sh"
 
+win:
+  icon: resources/icon.png
+  target:
+    # x64 only: upstream ECA server publishes no windows-aarch64 binary.
+    # NSIS (not zip/portable) is required for electron-updater auto-updates.
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
 publish:
   provider: github
   owner: editor-code-assistant
