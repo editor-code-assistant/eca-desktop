@@ -7,7 +7,9 @@ Verified fine (no action): artifact mapping & `eca.exe` handling, chmod/`X_OK` g
 `%APPDATA%` fallback, shell-env no-op on win32, menu accelerators (`CmdOrCtrl`),
 atomic writes/temp dirs, CRLF-safe parsers, CSP `file://` matching, preload.
 
-## Batch 1 — High (broken functionality) — released in v0.9.1
+## Batch 1 — High (broken functionality) — released in v0.9.2
+(v0.9.1 tag exists but its release was scrapped: POSIX-only test fixtures failed on the
+Windows runner; fixed in the follow-up commit.)
 
 - [x] **openFile dead on Windows** — `src/main/router.ts:318`
   Workspace roots derived with `new URL(uri).pathname` → `/C:/Users/...` garbage, scope

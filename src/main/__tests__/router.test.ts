@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 import type { IpcMessage } from '../protocol';
 
 // ── Mocks ──
@@ -218,38 +220,44 @@ describe('router.dispatch', () => {
     });
 
     describe('editor/openFile', () => {
+        // fileURLToPath is host-platform-dependent (POSIX-style file:///home/x
+        // URIs throw on Windows, which needs a drive letter), so build the
+        // fixtures from host-absolute paths instead of hardcoded URIs.
+        const rootA = path.resolve('/home/user/a');
+        const rootB = path.resolve('/home/user/b');
+
         it('passes workspace-root paths (not URIs) to editorActions.openFile', async () => {
             const { ctx } = makeCtx({
                 workspaceFolders: [
-                    { name: 'a', uri: 'file:///home/user/a' },
-                    { name: 'b', uri: 'file:///home/user/b' },
+                    { name: 'a', uri: pathToFileURL(rootA).href },
+                    { name: 'b', uri: pathToFileURL(rootB).href },
                 ],
             });
 
             await dispatch(ctx, {
                 type: 'editor/openFile' as never,
-                data: { path: '/home/user/a/main.ts' },
+                data: { path: path.join(rootA, 'main.ts') },
             });
 
             expect(editorActionsMock.openFile).toHaveBeenCalledOnce();
             const [payload, roots] = editorActionsMock.openFile.mock.calls[0];
-            expect(payload).toEqual({ path: '/home/user/a/main.ts' });
-            expect(roots).toEqual(['/home/user/a', '/home/user/b']);
+            expect(payload).toEqual({ path: path.join(rootA, 'main.ts') });
+            expect(roots).toEqual([rootA, rootB]);
         });
 
         it('skips malformed URIs silently', async () => {
             const { ctx } = makeCtx({
                 workspaceFolders: [
                     { name: 'a', uri: 'not-a-uri' },
-                    { name: 'b', uri: 'file:///home/user/b' },
+                    { name: 'b', uri: pathToFileURL(rootB).href },
                 ],
             });
             await dispatch(ctx, {
                 type: 'editor/openFile' as never,
-                data: { path: '/home/user/b/x.ts' },
+                data: { path: path.join(rootB, 'x.ts') },
             });
             const [, roots] = editorActionsMock.openFile.mock.calls[0];
-            expect(roots).toEqual(['/home/user/b']);
+            expect(roots).toEqual([rootB]);
         });
     });
 
