@@ -1,4 +1,4 @@
-import type { ChildProcess} from 'child_process';
+import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import extractZip from 'extract-zip';
@@ -179,10 +179,9 @@ function fetchTextOnce(url: string): Promise<string> {
     });
 }
 
-// Retrying wrapper around `fetchTextOnce`. Crucial for the sha256sums
-// fetch path: without retries, a single transient blip would silently
-// downgrade install to the "skip checksum verification" branch, which
-// defeats the supply-chain integrity check entirely.
+// Retrying wrapper around `fetchTextOnce`. Checksum retrieval is part of
+// the installation contract, so transient failures are retried before the
+// provisioning operation fails closed.
 function fetchText(url: string): Promise<string> {
     return withRetry(
         () => fetchTextOnce(url),
@@ -509,48 +508,32 @@ export class EcaServer {
     }
 
     /**
-     * Fetch the expected SHA-256 hex digest for `artifactName` at
-     * `version`. ECA releases publish per-artifact `<artifact>.sha256`
-     * assets (bare hex digest), which is tried first; falls back to a
-     * conventional `sha256sums.txt` aggregate (lines of the form
-     * `<hex>  <filename>`). Returns null when neither is available so
-     * first-launch doesn't hard-fail against releases without checksums.
+     * Fetch and validate the SHA-256 digest published next to an ECA release
+     * artifact. Provisioning fails closed when the checksum is unavailable or
+     * malformed; an unverified backend must never be extracted or executed.
      */
-    async getExpectedChecksum(version: string, artifactName: string): Promise<string | null> {
-        // Per-artifact asset: this is what eca releases actually publish.
-        // The previous sha256sums.txt-only lookup 404ed on every release,
-        // silently disabling verification.
-        try {
-            const artifactBody = await fetchText(`${GITHUB_RELEASES_DOWNLOAD}/${version}/${artifactName}.sha256`);
-            const hex = artifactBody.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-            if (/^[0-9a-f]{64}$/.test(hex)) return hex;
-            this.onLog(`Unexpected content in ${artifactName}.sha256; trying sha256sums.txt.`);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            this.onLog(`No ${artifactName}.sha256 found for ${version} (${message}); trying sha256sums.txt.`);
-        }
-        const checksumUrl = `${GITHUB_RELEASES_DOWNLOAD}/${version}/sha256sums.txt`;
+    async getExpectedChecksum(version: string, artifactName: string): Promise<string> {
+        const checksumUrl = `${GITHUB_RELEASES_DOWNLOAD}/${version}/${artifactName}.sha256`;
         let body: string;
         try {
             body = await fetchText(checksumUrl);
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.onLog(`No sha256sums.txt found for ${version} (${message}); skipping checksum verification.`);
-            return null;
+            throw new Error(`Could not retrieve checksum for ${artifactName}: ${message}`, { cause: err });
         }
-        for (const line of body.split(/\r?\n/)) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            // Accept both `hex filename` (one or more spaces) and gnu's
-            // `hex  filename` (two spaces). Also tolerate a leading `*`
-            // on the filename (binary-mode marker).
-            const parts = trimmed.split(/\s+/);
-            if (parts.length < 2) continue;
-            const [hex, ...rest] = parts;
-            const filename = rest.join(' ').replace(/^\*/, '');
-            if (filename === artifactName) return hex.toLowerCase();
+
+        const fields = body.trim().split(/\s+/);
+        const digest = fields[0]?.toLowerCase() ?? '';
+        const declaredArtifact = fields[1]?.replace(/^\*/, '');
+        if (!/^[0-9a-f]{64}$/.test(digest)) {
+            throw new Error(`Invalid SHA-256 checksum published for ${artifactName}.`);
         }
-        return null;
+        if (declaredArtifact !== undefined && declaredArtifact !== artifactName) {
+            throw new Error(
+                `Checksum asset for ${artifactName} declared a different artifact: ${declaredArtifact}.`,
+            );
+        }
+        return digest;
     }
 
     readVersionFile(): string {
@@ -636,24 +619,18 @@ export class EcaServer {
             this.onLog(`Downloading ECA server ${version} from ${downloadUrl}`);
             await downloadFile(downloadUrl, zipPath);
 
-            // Supply-chain integrity: verify the downloaded zip against the
-            // checksum published alongside the release. Older releases that
-            // predate checksum publication log a warning and proceed; MITM
-            // scenarios against TLS are the primary threat and HTTPS alone
-            // provides baseline protection there. See audit finding C5.
+            // Supply-chain integrity: the official artifact contract includes
+            // a per-artifact checksum. Missing, malformed, and mismatched
+            // checksums all fail before extraction.
             const expectedHash = await this.getExpectedChecksum(version, artifactName);
-            if (expectedHash) {
-                const actualHash = await sha256OfFile(zipPath);
-                if (actualHash !== expectedHash) {
-                    throw new Error(
-                        `Checksum mismatch for ${artifactName}: expected ${expectedHash}, got ${actualHash}. ` +
-                        `Refusing to install possibly-tampered binary.`,
-                    );
-                }
-                this.onLog(`Checksum OK for ${artifactName} (${actualHash.slice(0, 12)}...)`);
-            } else {
-                this.onLog(`Proceeding without checksum verification (no checksum asset found for this release).`);
+            const actualHash = await sha256OfFile(zipPath);
+            if (actualHash !== expectedHash) {
+                throw new Error(
+                    `Checksum mismatch for ${artifactName}: expected ${expectedHash}, got ${actualHash}. ` +
+                    `Refusing to install possibly-tampered binary.`,
+                );
             }
+            this.onLog(`Checksum OK for ${artifactName} (${actualHash.slice(0, 12)}...)`);
 
             this.onLog(`Extracting ${artifactName}...`);
             await extractZip(zipPath, { dir: stageDir });

@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import type * as OsModule from 'os';
+import { spawnSync } from 'child_process';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Readable } from 'stream';
+import { zipSync } from 'fflate';
+import * as os from 'os';
 
 // ── Mocks ──
 //
@@ -10,14 +16,21 @@ import type * as OsModule from 'os';
 const osMock = vi.hoisted(() => ({
     platform: vi.fn(() => 'linux' as NodeJS.Platform),
     arch: vi.fn(() => 'x64' as string),
+    home: '',
 }));
 vi.mock('os', async (importOriginal) => {
-    const actual = await importOriginal<typeof OsModule>();
+    const actual = await importOriginal<typeof os>();
     return {
         ...actual,
         platform: (...args: unknown[]) => osMock.platform(...(args as [])),
         arch: (...args: unknown[]) => osMock.arch(...(args as [])),
-        default: { ...actual, platform: () => osMock.platform(), arch: () => osMock.arch() },
+        homedir: () => osMock.home || actual.homedir(),
+        default: {
+            ...actual,
+            platform: () => osMock.platform(),
+            arch: () => osMock.arch(),
+            homedir: () => osMock.home || actual.homedir(),
+        },
     };
 });
 
@@ -47,7 +60,7 @@ import { HTTP_MAX_RETRIES } from '../constants';
 
 interface HttpsResponseOpts {
     statusCode?: number;
-    body?: string | object;
+    body?: string | object | Buffer;
     requestError?: Error;
 }
 
@@ -72,18 +85,13 @@ function makeHttpsImpl(opts: HttpsResponseOpts) {
                 req.emit('error', requestError);
                 return;
             }
-            const res = new EventEmitter() as EventEmitter & {
-                statusCode?: number;
-                resume: () => void;
-            };
-            res.statusCode = statusCode;
-            res.resume = (): void => { /* noop */ };
+            const payload = Buffer.isBuffer(body)
+                ? body
+                : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+            const res = Object.assign(Readable.from([payload]), { statusCode });
             cb(res);
-            // Error path: don't emit data/end.
-            if (statusCode >= 200 && statusCode < 300) {
-                const text = typeof body === 'string' ? body : JSON.stringify(body);
-                res.emit('data', text);
-                res.emit('end');
+            if (statusCode < 200 || statusCode >= 300) {
+                res.resume();
             }
         });
         return req;
@@ -118,10 +126,13 @@ describe('EcaServer', () => {
         mockHttpsGet.mockReset();
         osMock.platform.mockReturnValue('linux');
         osMock.arch.mockReturnValue('x64');
+        osMock.home = fs.mkdtempSync(path.join(os.tmpdir(), 'eca-server-test-'));
     });
 
     afterEach(() => {
         vi.useRealTimers();
+        fs.rmSync(osMock.home, { recursive: true, force: true });
+        osMock.home = '';
     });
 
     describe('initial state', () => {
@@ -151,8 +162,7 @@ describe('EcaServer', () => {
         }
 
         it('throws on unsupported platform', () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            osMock.platform.mockReturnValue('freebsd' as any);
+            osMock.platform.mockReturnValue('freebsd');
             osMock.arch.mockReturnValue('x64');
             const s = new EcaServer();
             expect(() => s.getArtifactName()).toThrow(/Unsupported platform/);
@@ -260,14 +270,6 @@ describe('EcaServer', () => {
         const artifact = 'eca-native-static-linux-amd64.zip';
         const hex64 = 'cafebabe'.repeat(8); // 64 hex chars
 
-        // The per-artifact `<artifact>.sha256` fetch now precedes the
-        // sha256sums.txt fallback. A successful-but-garbage response is
-        // the cheapest way to reach the fallback in tests without
-        // driving the 404 retry loop's backoff timers.
-        const artifactShaMiss = (): void => {
-            configureHttpsOnce({ body: 'not a checksum' });
-        };
-
         it('returns the digest from the per-artifact .sha256 asset', async () => {
             configureHttpsOnce({ body: `${hex64.toUpperCase()}\n` });
             const s = new EcaServer();
@@ -275,85 +277,41 @@ describe('EcaServer', () => {
                 .resolves.toBe(hex64);
         });
 
-        it('tolerates `hex  filename` format in the per-artifact asset', async () => {
+        it('accepts `hex  filename` when it names the requested artifact', async () => {
             configureHttpsOnce({ body: `${hex64}  ${artifact}\n` });
             const s = new EcaServer();
             await expect(s.getExpectedChecksum('v0.6.0', artifact))
                 .resolves.toBe(hex64);
         });
 
-        it('falls back to sha256sums.txt when the artifact asset is missing', async () => {
-            vi.useFakeTimers();
-            // The .sha256 fetch 404s through its whole retry budget first.
-            for (let i = 0; i < HTTP_MAX_RETRIES + 1; i++) {
-                configureHttpsOnce({ statusCode: 404 });
-            }
+        it('rejects a malformed digest', async () => {
             configureHttpsOnce({ body: `abc123  ${artifact}\n` });
             const s = new EcaServer();
-            const promise = s.getExpectedChecksum('v0.6.0', artifact);
-            await expect(awaitWithFakeTimers(promise)).resolves.toBe('abc123');
+            await expect(s.getExpectedChecksum('v0.6.0', artifact))
+                .rejects.toThrow(/Invalid SHA-256 checksum/);
         });
 
-        it('parses `hex  filename` lines and returns the lowercased hex', async () => {
-            artifactShaMiss();
-            configureHttpsOnce({
-                body: [
-                    'deadbeef  eca-native-macos-amd64.zip',
-                    `CAFEBABE  ${artifact}`,
-                    'f00df00d  eca-native-windows-amd64.zip',
-                ].join('\n'),
-            });
+        it('rejects a checksum that names a different artifact', async () => {
+            configureHttpsOnce({ body: `${hex64}  another-artifact.zip\n` });
             const s = new EcaServer();
             await expect(s.getExpectedChecksum('v0.6.0', artifact))
-                .resolves.toBe('cafebabe');
+                .rejects.toThrow(/declared a different artifact/);
         });
 
-        it('ignores # comments and blank lines', async () => {
-            artifactShaMiss();
-            configureHttpsOnce({
-                body: [
-                    '# ECA checksums',
-                    '',
-                    '   ',
-                    `abc123  ${artifact}`,
-                ].join('\n'),
-            });
+        it('accepts the GNU binary-mode filename marker', async () => {
+            configureHttpsOnce({ body: `${hex64}  *${artifact}\n` });
             const s = new EcaServer();
             await expect(s.getExpectedChecksum('v0.6.0', artifact))
-                .resolves.toBe('abc123');
+                .resolves.toBe(hex64);
         });
 
-        it('tolerates GNU `*filename` binary-mode marker', async () => {
-            artifactShaMiss();
-            configureHttpsOnce({
-                body: `abc  *${artifact}\n`,
-            });
-            const s = new EcaServer();
-            await expect(s.getExpectedChecksum('v0.6.0', artifact))
-                .resolves.toBe('abc');
-        });
-
-        it('returns null when the artifact is not listed', async () => {
-            artifactShaMiss();
-            configureHttpsOnce({
-                body: 'deadbeef  some-other-file.zip\n',
-            });
-            const s = new EcaServer();
-            await expect(s.getExpectedChecksum('v0.6.0', artifact)).resolves.toBeNull();
-        });
-
-        it('returns null after exhausting retries when no checksum asset exists', async () => {
+        it('fails closed after exhausting retries when the checksum is unavailable', async () => {
             vi.useFakeTimers();
             configureHttpsAlways({ statusCode: 404 });
             const s = new EcaServer();
-            const logs: string[] = [];
-            s.onLog = (msg): void => { logs.push(msg); };
             const promise = s.getExpectedChecksum('v0.6.0', artifact);
-            await expect(awaitWithFakeTimers(promise)).resolves.toBeNull();
-            expect(logs.some((m) => /No sha256sums\.txt/i.test(m))).toBe(true);
-            // Both the per-artifact and the aggregate fetch honour the
-            // retry budget before giving up.
-            expect(mockHttpsGet).toHaveBeenCalledTimes(2 * (HTTP_MAX_RETRIES + 1));
+            await expect(awaitWithFakeTimers(promise)).rejects.toThrow(/Could not retrieve checksum/);
+            expect(mockHttpsGet).toHaveBeenCalledTimes(HTTP_MAX_RETRIES + 1);
         });
 
         it('retries the artifact checksum fetch on transient failure and succeeds', async () => {
@@ -368,17 +326,83 @@ describe('EcaServer', () => {
             expect(mockHttpsGet).toHaveBeenCalledTimes(2);
         });
 
-        it('skips malformed lines (single-token)', async () => {
-            artifactShaMiss();
-            configureHttpsOnce({
-                body: [
-                    'orphan-token',
-                    `abc123  ${artifact}`,
-                ].join('\n'),
-            });
+    });
+
+    describe.runIf(process.platform === 'win32')('Windows backend provisioning integration', () => {
+        const version = 'v-test-windows';
+        const artifact = 'eca-native-windows-amd64.zip';
+
+        function getWindowsSourceExecutable(): string {
+            const windowsRoot = process.env.SystemRoot;
+            if (!windowsRoot) throw new Error('SystemRoot is required for the Windows integration test.');
+            return path.join(windowsRoot, 'System32', 'where.exe');
+        }
+
+        function makeWindowsArchive(entryName = 'eca.exe'): Buffer {
+            const sourceExecutable = fs.readFileSync(getWindowsSourceExecutable());
+            return Buffer.from(zipSync({ [entryName]: sourceExecutable }, { level: 0 }));
+        }
+
+        it('selects, verifies, extracts, and executes the official Windows x64 artifact contract', async () => {
+            osMock.platform.mockReturnValue('win32');
+            osMock.arch.mockReturnValue('x64');
+            const archive = makeWindowsArchive();
+            const digest = crypto.createHash('sha256').update(archive).digest('hex');
+            configureHttpsOnce({ body: archive });
+            configureHttpsOnce({ body: `${digest}  ${artifact}\n` });
             const s = new EcaServer();
-            await expect(s.getExpectedChecksum('v0.6.0', artifact))
-                .resolves.toBe('abc123');
+
+            await s.downloadServer(version);
+
+            const managedBinary = s.getManagedBinaryPath();
+            expect(s.getArtifactName()).toBe(artifact);
+            expect(fs.readFileSync(managedBinary)).toEqual(
+                fs.readFileSync(getWindowsSourceExecutable()),
+            );
+            expect(s.readVersionFile()).toBe(version);
+            expect(fs.readdirSync(path.dirname(managedBinary)).some((name) => name.startsWith('.eca-download-')))
+                .toBe(false);
+            expect(mockHttpsGet.mock.calls.map(([url]) => url)).toEqual([
+                expect.stringMatching(new RegExp(`/${version}/${artifact}$`)),
+                expect.stringMatching(new RegExp(`/${version}/${artifact}\\.sha256$`)),
+            ]);
+
+            const execution = spawnSync(managedBinary, ['cmd.exe'], { encoding: 'utf8' });
+            expect(execution.error).toBeUndefined();
+            expect(execution.status).toBe(0);
+            expect(execution.stdout.toLowerCase()).toContain('cmd.exe');
+        });
+
+        it('rejects a checksum mismatch before extraction and cleans the staging directory', async () => {
+            osMock.platform.mockReturnValue('win32');
+            osMock.arch.mockReturnValue('x64');
+            const archive = makeWindowsArchive();
+            configureHttpsOnce({ body: archive });
+            configureHttpsOnce({ body: `${'0'.repeat(64)}  ${artifact}\n` });
+            const s = new EcaServer();
+
+            await expect(s.downloadServer(version)).rejects.toThrow(/Checksum mismatch/);
+
+            expect(fs.existsSync(s.getManagedBinaryPath())).toBe(false);
+            expect(s.readVersionFile()).toBe('');
+            expect(fs.readdirSync(path.dirname(s.getManagedBinaryPath())).some((name) => name.startsWith('.eca-download-')))
+                .toBe(false);
+        });
+
+        it('rejects an archive without eca.exe and cleans the staging directory', async () => {
+            osMock.platform.mockReturnValue('win32');
+            osMock.arch.mockReturnValue('x64');
+            const archive = makeWindowsArchive('wrong-name.exe');
+            const digest = crypto.createHash('sha256').update(archive).digest('hex');
+            configureHttpsOnce({ body: archive });
+            configureHttpsOnce({ body: `${digest}\n` });
+            const s = new EcaServer();
+
+            await expect(s.downloadServer(version)).rejects.toThrow(/did not contain expected binary: eca\.exe/);
+
+            expect(fs.existsSync(s.getManagedBinaryPath())).toBe(false);
+            expect(fs.readdirSync(path.dirname(s.getManagedBinaryPath())).some((name) => name.startsWith('.eca-download-')))
+                .toBe(false);
         });
     });
 
