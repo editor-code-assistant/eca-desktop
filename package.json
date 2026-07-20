@@ -37,7 +37,7 @@
     "package:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9",
+    "electron-updater": "^6.8.9",
     "extract-zip": "^2.0.1",
     "follow-redirects": "^1.15.9",
     "jsonc-parser": "^3.3.1",
@@ -45,20 +45,18 @@
   },
   "devDependencies": {
     "@types/follow-redirects": "^1.13.0",
-    "@types/node": "^20.x",
-    "concurrently": "^9.1.2",
-    "electron": "^41.0.0",
-    "electron-builder": "^26.0.0",
-    "esbuild": "^0.25.3",
+    "@types/node": "^24.13.3",
+    "concurrently": "^10.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.0.0",
-    "vitest": "^4.1.4",
-    "wait-on": "^8.0.3"
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.10",
+    "wait-on": "^9.0.10"
   },
-  "overrides": {
-    "axios": "^1.15.2",
-    "@xmldom/xmldom": "^0.8.13",
-    "ip-address": "^10.1.1",
-    "yauzl": "^3.4.0"
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "electron-winstaller": false
   }
 }
