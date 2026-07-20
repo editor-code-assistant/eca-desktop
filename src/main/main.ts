@@ -146,6 +146,22 @@ function createWindow(): BrowserWindow {
 }
 
 async function main(): Promise<void> {
+  // Windows taskbar identity (grouping, pinning, future notifications)
+  // must be set explicitly and match the installer appId from
+  // electron-builder.yml.
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('dev.eca.desktop');
+  }
+
+  // Single instance: a second launch (double-clicked shortcut on Windows,
+  // typically) would share ~/.eca-desktop — sessions.json, logs,
+  // concurrent binary downloads — with the first one. Defer to the
+  // existing instance, which focuses its window on `second-instance`.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+
   await app.whenReady();
 
   // Deny every permission request by default (notifications, media,
@@ -208,6 +224,19 @@ async function main(): Promise<void> {
   }
 
   const mainWindow = createWindow();
+
+  // Surface the running app when the user launches a second instance
+  // (see requestSingleInstanceLock above).
+  app.on('second-instance', () => {
+    const win = !mainWindow.isDestroyed()
+      ? mainWindow
+      : BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
 
   const preferencesStore = new PreferencesStore();
 

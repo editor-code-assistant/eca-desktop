@@ -42,6 +42,16 @@ vi.mock('fs', async (importOriginal) => {
     };
 });
 
+// Mock `child_process` so killServerProcess tests can observe taskkill
+// spawns. start()/stop() lifecycle tests are skipped (see EOF notes), so
+// nothing else in this file spawns.
+const spawnMock = vi.hoisted(() => vi.fn());
+vi.mock('child_process', async (importOriginal) => {
+    const actual = await importOriginal<Record<string, unknown>>();
+    const spawn = (...args: unknown[]) => spawnMock(...args);
+    return { ...actual, spawn, default: { ...actual, spawn } };
+});
+
 // Mock follow-redirects. Each test configures the next https.get call
 // via the mockHttpsGet.mockImplementationOnce shim below.
 const mockHttpsGet = vi.hoisted(() => vi.fn());
@@ -61,8 +71,9 @@ vi.mock('electron', () => ({
     app: { getPath: () => '/tmp' },
 }));
 
-import { EcaServer, EcaServerStatus } from '../server';
+import { EcaServer, EcaServerStatus, killServerProcess } from '../server';
 import { HTTP_MAX_RETRIES } from '../constants';
+import type { ChildProcess } from 'child_process';
 
 // ── Helpers ──
 
@@ -465,6 +476,55 @@ describe('EcaServer', () => {
             fs.writeFileSync(path.join(dir, 'eca.old-1700000000000'), 'stale');
             new EcaServer().installBinary(staged, managed);
             expect(fs.readdirSync(dir).some((e) => e.startsWith('eca.old-'))).toBe(false);
+        });
+    });
+
+    describe('killServerProcess', () => {
+        beforeEach(() => {
+            spawnMock.mockReset();
+        });
+
+        function fakeProc(pid: number | undefined): { proc: ChildProcess; kill: ReturnType<typeof vi.fn> } {
+            const kill = vi.fn();
+            return { proc: { pid, kill } as unknown as ChildProcess, kill };
+        }
+
+        it('sends the signal directly on POSIX', () => {
+            const { proc, kill } = fakeProc(42);
+            killServerProcess(proc, 'SIGTERM');
+            expect(kill).toHaveBeenCalledWith('SIGTERM');
+            expect(spawnMock).not.toHaveBeenCalled();
+        });
+
+        it('kills the whole tree via taskkill on win32', () => {
+            osMock.platform.mockReturnValue('win32');
+            spawnMock.mockReturnValue(new EventEmitter());
+            const { proc, kill } = fakeProc(42);
+            killServerProcess(proc, 'SIGTERM');
+            expect(spawnMock).toHaveBeenCalledWith(
+                'taskkill',
+                ['/pid', '42', '/T', '/F'],
+                { stdio: 'ignore', windowsHide: true },
+            );
+            expect(kill).not.toHaveBeenCalled();
+        });
+
+        it('falls back to a direct kill when taskkill cannot start', () => {
+            osMock.platform.mockReturnValue('win32');
+            const taskkill = new EventEmitter();
+            spawnMock.mockReturnValue(taskkill);
+            const { proc, kill } = fakeProc(42);
+            killServerProcess(proc, 'SIGKILL');
+            taskkill.emit('error', new Error('ENOENT'));
+            expect(kill).toHaveBeenCalledWith('SIGKILL');
+        });
+
+        it('sends the signal directly on win32 when the pid is unavailable', () => {
+            osMock.platform.mockReturnValue('win32');
+            const { proc, kill } = fakeProc(undefined);
+            killServerProcess(proc, 'SIGTERM');
+            expect(kill).toHaveBeenCalledWith('SIGTERM');
+            expect(spawnMock).not.toHaveBeenCalled();
         });
     });
 

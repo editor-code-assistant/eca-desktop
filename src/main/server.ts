@@ -304,6 +304,35 @@ async function sha256OfFile(filePath: string): Promise<string> {
     });
 }
 
+/**
+ * Terminate the server process. On Windows, `ChildProcess.kill()` maps to
+ * TerminateProcess on the direct child only, orphaning its subprocess tree
+ * (MCP stdio servers, tool children) — take the whole tree down with
+ * `taskkill /T` instead, falling back to a direct kill if taskkill can't
+ * start. On POSIX the signal is delivered as-is and this behaves exactly
+ * like `proc.kill(signal)`, including throwing, so callers keep their
+ * existing error handling.
+ */
+export function killServerProcess(proc: ChildProcess, signal: NodeJS.Signals): void {
+    if (os.platform() === 'win32' && typeof proc.pid === 'number') {
+        let taskkill: ChildProcess;
+        try {
+            taskkill = spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+                stdio: 'ignore',
+                windowsHide: true,
+            });
+        } catch {
+            proc.kill(signal);
+            return;
+        }
+        taskkill.on('error', () => {
+            try { proc.kill(signal); } catch { /* noop */ }
+        });
+        return;
+    }
+    proc.kill(signal);
+}
+
 // Single-flight guard for binary downloads. Every session owns its own
 // EcaServer instance, but they all share the managed binary under
 // ~/.eca-desktop — two sessions starting at once must never download and
@@ -815,7 +844,7 @@ export class EcaServer {
         if (this._proc && !this._proc.killed
             && this._proc.exitCode === null && this._proc.signalCode === null) {
             this.onLog('Cleaning up orphaned ECA server process before restart.');
-            try { this._proc.kill('SIGKILL'); } catch { /* noop */ }
+            try { killServerProcess(this._proc, 'SIGKILL'); } catch { /* noop */ }
         }
         this._proc = null;
         if (this._connection) {
@@ -1064,7 +1093,7 @@ export class EcaServer {
             }
             if (proc) {
                 if (proc.exitCode === null && proc.signalCode === null) {
-                    try { proc.kill('SIGTERM'); } catch { /* noop */ }
+                    try { killServerProcess(proc, 'SIGTERM'); } catch { /* noop */ }
                     // SIGKILL follow-up after a short beat so a wedged
                     // server doesn't linger. (Checked via exitCode /
                     // signalCode, not `killed` — `killed` flips true the
@@ -1074,7 +1103,7 @@ export class EcaServer {
                     setTimeout(() => {
                         try {
                             if (p.exitCode === null && p.signalCode === null) {
-                                p.kill('SIGKILL');
+                                killServerProcess(p, 'SIGKILL');
                             }
                         } catch { /* noop */ }
                     }, SERVER_STOP_GRACE_MS);
@@ -1228,11 +1257,11 @@ export class EcaServer {
                 const killTimer = setTimeout(() => {
                     if (settled) return;
                     this.onLog('ECA server did not exit within grace period; sending SIGKILL.');
-                    try { proc.kill('SIGKILL'); } catch { /* noop */ }
+                    try { killServerProcess(proc, 'SIGKILL'); } catch { /* noop */ }
                     // Give the kernel a beat to reap; resolve either way.
                     setTimeout(onExit, 250);
                 }, SERVER_STOP_GRACE_MS);
-                try { proc.kill('SIGTERM'); }
+                try { killServerProcess(proc, 'SIGTERM'); }
                 catch { onExit(); }
             });
         }
