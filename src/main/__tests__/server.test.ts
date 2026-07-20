@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import type * as OsModule from 'os';
 
 // ── Mocks ──
 //
@@ -11,7 +12,7 @@ const osMock = vi.hoisted(() => ({
     arch: vi.fn(() => 'x64' as string),
 }));
 vi.mock('os', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('os')>();
+    const actual = await importOriginal<typeof OsModule>();
     return {
         ...actual,
         platform: (...args: unknown[]) => osMock.platform(...(args as [])),

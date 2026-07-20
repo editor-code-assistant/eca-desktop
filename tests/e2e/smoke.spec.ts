@@ -31,7 +31,6 @@ test('app launches and main window has a title', async () => {
     expect(title.length).toBeGreaterThan(0);
     // Soft check — don't fail the smoke test if the product name changes.
     if (!/ECA/i.test(title)) {
-        // eslint-disable-next-line no-console
         console.warn(`[smoke] window title did not contain "ECA": ${title}`);
     }
 
