@@ -52,6 +52,7 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
 
     let recentWorkspaces: RecentWorkspace[] = [];
     let hasSessions = false;
+    let hasApplicationRoute = false;
 
     // Pending hide-welcome timer scheduled by `render(hasSessions=true)`.
     // We track it so a subsequent `render(false)` (e.g. user closed the
@@ -265,7 +266,8 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
             pendingHideTimer = null;
         }
 
-        if (hasSessions) {
+        const shouldShowApplication = hasSessions || hasApplicationRoute;
+        if (shouldShowApplication) {
             root.style.display = '';
             const logo = welcomeScreen.querySelector(
                 '.welcome-logo .welcome-logo-icon',
@@ -277,7 +279,7 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
                 // Re-check inside the callback: if hasSessions flipped
                 // back to false during the fade, we already re-rendered
                 // the welcome and must not hide it now.
-                if (!hasSessions) return;
+                if (!hasSessions && !hasApplicationRoute) return;
                 welcomeScreen.style.display = 'none';
                 document.body.classList.remove('welcome-active');
                 stopRain();
@@ -445,6 +447,19 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
             updateVisibility(data.sessions);
         });
     }
+
+    // The shared React webview owns its memory-router state. Settings can be
+    // opened from the native menu before a workspace session exists, so the
+    // desktop shell observes that route's mounted boundary and feeds it into
+    // the same visibility state machine as sessions. Unmounting Settings (the
+    // Back action) restores the welcome screen automatically.
+    const routeObserver = new MutationObserver(() => {
+        const nextHasApplicationRoute = root.querySelector('.settings-container') !== null;
+        if (nextHasApplicationRoute === hasApplicationRoute) return;
+        hasApplicationRoute = nextHasApplicationRoute;
+        render();
+    });
+    routeObserver.observe(root, { childList: true, subtree: true });
 
     // Initial render
     render();
