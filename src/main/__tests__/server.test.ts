@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // ── Mocks ──
 //
@@ -17,6 +20,25 @@ vi.mock('os', async (importOriginal) => {
         platform: (...args: unknown[]) => osMock.platform(...(args as [])),
         arch: (...args: unknown[]) => osMock.arch(...(args as [])),
         default: { ...actual, platform: () => osMock.platform(), arch: () => osMock.arch() },
+    };
+});
+
+// Mock `fs` with a passthrough renameSync that individual tests can
+// override (vi.spyOn can't patch the non-configurable ESM namespace).
+type RenameSyncFn = (oldPath: fs.PathLike, newPath: fs.PathLike) => void;
+const fsMock = vi.hoisted(() => ({
+    renameSync: undefined as RenameSyncFn | undefined,
+    actualRenameSync: undefined as RenameSyncFn | undefined,
+}));
+vi.mock('fs', async (importOriginal) => {
+    const actual = await importOriginal<typeof fs>();
+    fsMock.actualRenameSync = actual.renameSync;
+    const renameSync: RenameSyncFn = (oldPath, newPath) =>
+        (fsMock.renameSync ?? actual.renameSync)(oldPath, newPath);
+    return {
+        ...actual,
+        renameSync,
+        default: { ...actual, renameSync },
     };
 });
 
@@ -378,6 +400,71 @@ describe('EcaServer', () => {
             const s = new EcaServer();
             await expect(s.getExpectedChecksum('v0.6.0', artifact))
                 .resolves.toBe('abc123');
+        });
+    });
+
+    describe('installBinary', () => {
+        let dir: string;
+        let staged: string;
+        let managed: string;
+
+        beforeEach(() => {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eca-install-'));
+            staged = path.join(dir, 'staged', 'eca');
+            fs.mkdirSync(path.dirname(staged));
+            managed = path.join(dir, 'eca');
+        });
+
+        afterEach(() => {
+            fsMock.renameSync = undefined;
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        /** Make the first staged→managed rename throw, as Windows does for a running exe. */
+        function refuseFirstInstallRename(code: string): void {
+            let refused = false;
+            fsMock.renameSync = (src, dest) => {
+                if (!refused && src === staged && dest === managed) {
+                    refused = true;
+                    throw Object.assign(new Error(`${code}: locked exe`), { code });
+                }
+                fsMock.actualRenameSync!(src, dest);
+            };
+        }
+
+        it('renames the staged binary over the managed path', () => {
+            fs.writeFileSync(staged, 'new');
+            fs.writeFileSync(managed, 'old');
+            new EcaServer().installBinary(staged, managed);
+            expect(fs.readFileSync(managed, 'utf8')).toBe('new');
+            expect(fs.existsSync(staged)).toBe(false);
+        });
+
+        it('parks a locked binary aside and installs (Windows rename-over refusal)', () => {
+            fs.writeFileSync(staged, 'new');
+            fs.writeFileSync(managed, 'old');
+            refuseFirstInstallRename('EPERM');
+            new EcaServer().installBinary(staged, managed);
+            expect(fs.readFileSync(managed, 'utf8')).toBe('new');
+            const parked = fs.readdirSync(dir).filter((e) => e.startsWith('eca.old-'));
+            expect(parked).toHaveLength(1);
+            expect(fs.readFileSync(path.join(dir, parked[0]), 'utf8')).toBe('old');
+        });
+
+        it('falls back to unlink when rename-aside is impossible, then installs', () => {
+            fs.writeFileSync(staged, 'new');
+            // No managed binary on disk: rename-aside and unlink both ENOENT.
+            refuseFirstInstallRename('EACCES');
+            new EcaServer().installBinary(staged, managed);
+            expect(fs.readFileSync(managed, 'utf8')).toBe('new');
+        });
+
+        it('removes stale parked binaries from previous installs', () => {
+            fs.writeFileSync(staged, 'new');
+            fs.writeFileSync(managed, 'old');
+            fs.writeFileSync(path.join(dir, 'eca.old-1700000000000'), 'stale');
+            new EcaServer().installBinary(staged, managed);
+            expect(fs.readdirSync(dir).some((e) => e.startsWith('eca.old-'))).toBe(false);
         });
     });
 

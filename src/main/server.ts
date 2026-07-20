@@ -599,6 +599,43 @@ export class EcaServer {
         return promise;
     }
 
+    /**
+     * Swap the staged binary into place. POSIX rename-over is atomic and
+     * effectively always succeeds. Windows refuses to rename over — or
+     * unlink — the image of a running process, but it does allow renaming
+     * it aside, so fall back to parking the old exe as `<name>.old-<ts>`
+     * and retrying; parked leftovers are removed on later installs once
+     * their process has exited.
+     */
+    installBinary(stagedBinary: string, managedBinary: string): void {
+        this.cleanupParkedBinaries(managedBinary);
+        try {
+            fs.renameSync(stagedBinary, managedBinary);
+        } catch {
+            try {
+                fs.renameSync(managedBinary, `${managedBinary}.old-${Date.now()}`);
+            } catch {
+                // Rename-aside failed (e.g. no previous binary); last-resort
+                // unlink, then let the retry surface any real error.
+                try { fs.unlinkSync(managedBinary); } catch { /* noop */ }
+            }
+            fs.renameSync(stagedBinary, managedBinary);
+        }
+    }
+
+    /** Remove `.old-*` binaries parked by installBinary (best-effort: still-running exes stay). */
+    private cleanupParkedBinaries(managedBinary: string): void {
+        const dir = path.dirname(managedBinary);
+        const prefix = `${path.basename(managedBinary)}.old-`;
+        try {
+            for (const entry of fs.readdirSync(dir)) {
+                if (entry.startsWith(prefix)) {
+                    try { fs.unlinkSync(path.join(dir, entry)); } catch { /* still running */ }
+                }
+            }
+        } catch { /* best-effort */ }
+    }
+
     /** Remove stage dirs left behind by a previous crashed/killed run. */
     private cleanupStaleStageDirs(): void {
         const dataDir = getDataDir();
@@ -674,15 +711,7 @@ export class EcaServer {
                 fs.chmodSync(stagedBinary, 0o775);
             }
 
-            const managedBinary = this.getManagedBinaryPath();
-            try {
-                fs.renameSync(stagedBinary, managedBinary);
-            } catch {
-                // Windows can refuse to rename over a locked/running exe.
-                // Drop the old file first and retry once.
-                try { fs.unlinkSync(managedBinary); } catch { /* noop */ }
-                fs.renameSync(stagedBinary, managedBinary);
-            }
+            this.installBinary(stagedBinary, this.getManagedBinaryPath());
 
             this.writeVersionFile(version);
             this.onLog(`ECA server ${version} installed successfully`);
@@ -848,6 +877,9 @@ export class EcaServer {
             const child = spawn(serverPath, ['server'], {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 env: { ...process.env, ...shellEnv },
+                // Don't allocate a visible console window for the
+                // console-subsystem eca.exe on Windows.
+                windowsHide: true,
             });
             proc = child;
             this._proc = child;

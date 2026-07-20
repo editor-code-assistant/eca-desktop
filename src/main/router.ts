@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { BrowserWindow } from 'electron';
+import { fileURLToPath } from 'url';
 import type * as rpc from 'vscode-jsonrpc/node';
 import * as rpcTypes from './rpc';
 import type { ChatState } from './chat-state';
@@ -317,7 +318,9 @@ const routes: Record<string, RouteHandler> = {
         // as file:// URIs; convert each to a filesystem path.
         const roots = ctx.workspaceFolders
             .map((f) => {
-                try { return new URL(f.uri).pathname; }
+                // fileURLToPath (not URL.pathname) so Windows URIs like
+                // file:///C:/Users/x yield C:\Users\x instead of /C:/Users/x.
+                try { return fileURLToPath(f.uri); }
                 catch { return null; }
             })
             .filter((p): p is string => p !== null);
