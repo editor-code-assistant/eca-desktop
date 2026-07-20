@@ -7,51 +7,55 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to (re-)release (e.g. v0.4.1)'
+        description: 'Existing tag to (re-)release (e.g. v0.8.1)'
         required: true
         type: string
 
 permissions:
-  contents: write      # create/attach release assets
-  id-token: write      # OIDC for Sigstore-based provenance
-  attestations: write  # upload build attestations
+  contents: read
 
 concurrency:
-  # Allow concurrent releases for different refs, but never duplicate the same one.
-  # Never cancel an in-progress release — partial publishes are worse than waiting.
   group: release-${{ github.event.inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     strategy:
-      fail-fast: false  # let the other platform finish even if one fails
+      fail-fast: false
       matrix:
         include:
+          - os: windows-latest
+            platform: windows
           - os: macos-latest
-            platform: mac
+            platform: macos
           - os: ubuntu-latest
             platform: linux
-    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - name: Check out release revision and webview
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
             package-lock.json
             eca-webview/package-lock.json
 
-      - name: Cache electron & electron-builder downloads
-        uses: actions/cache@v5
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/electron
@@ -63,25 +67,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint without warnings
         run: npm run lint
 
-      - name: Test
+      - name: Run tests
         run: npm test
 
-      - name: Build
+      - name: Audit desktop dependencies
+        run: npm audit
+
+      - name: Audit webview dependencies
+        run: npm audit --prefix eca-webview
+
+      - name: Build application
         run: npm run build
 
-      - name: Package & Publish (macOS)
-        if: matrix.platform == 'mac'
+      # This job is intentionally unsigned. Future Windows signing must use a
+      # separate job and configuration so credentials cannot silently change
+      # the trust model or reproducibility of this release path.
+      - name: Package Windows x64 installer (unsigned)
+        if: matrix.platform == 'windows'
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Package macOS artifacts
+        if: matrix.platform == 'macos'
         shell: bash
-        # Secrets are staged under *_RAW aliases via env: and only re-exported
-        # under the real names when non-empty. This matters because an empty
-        # CSC_LINK is NOT the same as an unset CSC_LINK — electron-builder
-        # treats an empty CSC_LINK as a file path and fails with "not a file".
-        # Only by leaving CSC_LINK truly unset does it skip signing cleanly.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK_RAW: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD_RAW: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID_RAW: ${{ secrets.APPLE_ID }}
@@ -89,47 +103,83 @@ jobs:
           APPLE_TEAM_ID_RAW: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [[ -n "${CSC_LINK_RAW:-}" ]]; then
-            echo "→ Apple signing identity present; building SIGNED (+ notarized if Apple* secrets set)"
+            echo "Apple signing identity present; building signed artifacts"
             export CSC_LINK="$CSC_LINK_RAW"
-            export CSC_KEY_PASSWORD="$CSC_KEY_PASSWORD_RAW"
-            export APPLE_ID="$APPLE_ID_RAW"
-            export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
-            export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
-            # Leave CSC_IDENTITY_AUTO_DISCOVERY unset → electron-builder default (true)
+            if [[ -n "${CSC_KEY_PASSWORD_RAW:-}" ]]; then
+              export CSC_KEY_PASSWORD="$CSC_KEY_PASSWORD_RAW"
+            fi
+            if [[ -n "${APPLE_ID_RAW:-}" || -n "${APPLE_APP_SPECIFIC_PASSWORD_RAW:-}" || -n "${APPLE_TEAM_ID_RAW:-}" ]]; then
+              if [[ -z "${APPLE_ID_RAW:-}" || -z "${APPLE_APP_SPECIFIC_PASSWORD_RAW:-}" || -z "${APPLE_TEAM_ID_RAW:-}" ]]; then
+                echo "Apple notarization credentials must be supplied as a complete set" >&2
+                exit 1
+              fi
+              echo "Complete Apple notarization credentials present"
+              export APPLE_ID="$APPLE_ID_RAW"
+              export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
+              export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
+            else
+              echo "No Apple notarization credentials supplied; notarization is disabled"
+            fi
           else
-            echo "→ No Apple signing identity; building UNSIGNED"
+            echo "No Apple signing identity; building unsigned artifacts"
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
-          npx electron-builder --mac --x64 --arm64 --publish always
+          npx electron-builder --mac --x64 --arm64 --publish never
 
-      - name: Package & Publish (Linux)
+      - name: Package Linux artifacts
         if: matrix.platform == 'linux'
-        run: npx electron-builder --linux --x64 --arm64 --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --x64 --arm64 --publish never
 
-      - name: List produced artifacts
-        shell: bash
-        run: ls -la release/
+      - name: Generate SHA-256 manifest
+        run: npm run release:checksums -- release ${{ matrix.platform }}
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
-          subject-path: |
+          subject-checksums: release/SHA256SUMS-${{ matrix.platform }}.txt
+
+      - name: Stage release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: eca-release-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          path: |
+            release/*.exe
             release/*.dmg
             release/*.zip
             release/*.AppImage
             release/*.deb
+            release/*.blockmap
+            release/latest*.yml
+            release/SHA256SUMS-*.txt
 
   publish-release:
-    needs: release
+    name: Publish release
+    needs: build
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    permissions:
+      actions: read
+      contents: write
 
-      - name: Publish draft release
-        run: gh release edit "${TAG}" --draft=false
+    steps:
+      - name: Download validated release files
+        uses: actions/download-artifact@v8
+        with:
+          pattern: eca-release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update draft and publish it
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG"
+          fi
+          gh release upload "$TAG" release-assets/* --clobber
+          gh release edit "$TAG" --draft=false
