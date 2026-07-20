@@ -7,6 +7,7 @@ release/
 src/renderer/sidebar.js
 src/renderer/welcome.js
 src/renderer/preferences.js
+src/renderer/input-dialog.js
 src/renderer/index-bootstrap.js
 src/renderer/preferences-bootstrap.js
 

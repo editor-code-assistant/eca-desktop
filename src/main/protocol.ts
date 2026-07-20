@@ -378,6 +378,24 @@ export interface EditorSaveFileData {
     content: string;
 }
 
+export interface EditorReadInputData {
+    /** Prompt title (ProvidersTab login flows). */
+    title?: string;
+    /** Prompt message (ChatPrompt command-argument flow). */
+    message?: string;
+    placeholder?: string;
+    /** When present, the dialog renders a pick list of these labels. */
+    options?: string[];
+    /** Mask the typed value (secrets / API keys). */
+    password?: boolean;
+    /**
+     * Present when the caller used webviewSendAndGet (ChatPrompt): the
+     * response is sent back as `editor/readInput` with this id. Absent
+     * for ProvidersTab, which listens for `editor/readInputResponse`.
+     */
+    requestId?: string;
+}
+
 export interface EditorSaveClipboardImageData {
     base64Data: string;
     mimeType: string;
@@ -488,6 +506,7 @@ export type IpcMessageType =
     | 'jobs/kill'
     | 'editor/openFile'
     | 'editor/openUrl'
+    | 'editor/readInput'
     | 'editor/saveFile'
     | 'editor/saveClipboardImage'
     | 'editor/toggleSidebar'

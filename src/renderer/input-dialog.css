@@ -1,0 +1,118 @@
+/* ECA Desktop — input dialog (editor/readInput) styles.
+ * Consumes the --eca-* variables from theme.css, which are scoped to
+ * html[data-editor="desktop"] (set by input-dialog.ts on boot). */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    background: var(--eca-editor-bg, #0c0c0c);
+    color: var(--eca-editor-fg, #e0e4ea);
+    overflow: hidden;
+    user-select: none;
+}
+
+.dialog-root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+    padding: 16px;
+}
+
+.dialog-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* ── Text input mode ── */
+
+.dialog-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--eca-base-border, #262626);
+    border-radius: 6px;
+    background: var(--eca-input-bg, #1a1a1a);
+    color: var(--eca-input-fg, #e0e4ea);
+    font-size: 13px;
+    outline: none;
+}
+
+.dialog-input::placeholder {
+    color: var(--eca-input-placeholder-fg, #6b7280);
+}
+
+.dialog-input:focus {
+    border-color: var(--eca-accent-fg, #00a5b8);
+}
+
+/* ── Options (pick list) mode ── */
+
+.dialog-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+}
+
+.dialog-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid var(--eca-base-border, #262626);
+    border-radius: 6px;
+    background: var(--eca-input-bg, #1a1a1a);
+    color: var(--eca-editor-fg, #e0e4ea);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.dialog-option:hover,
+.dialog-option:focus-visible {
+    border-color: var(--eca-accent-fg, #00a5b8);
+    background: var(--eca-base-hover, #262626);
+    outline: none;
+}
+
+/* ── Footer buttons ── */
+
+.dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.dialog-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--eca-base-border, #262626);
+    background: transparent;
+    color: var(--eca-editor-fg, #e0e4ea);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.dialog-btn:hover {
+    background: var(--eca-base-hover, #262626);
+}
+
+.dialog-btn.primary {
+    background: var(--eca-accent-fg, #00a5b8);
+    border-color: var(--eca-accent-fg, #00a5b8);
+    color: #ffffff;
+}
+
+.dialog-btn.primary:hover {
+    filter: brightness(1.1);
+}

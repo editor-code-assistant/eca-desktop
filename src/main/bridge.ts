@@ -229,6 +229,11 @@ export function createBridge(
                 sendToRenderer('server/statusChanged', status);
             }
             sendSessionListUpdate();
+            // Replay messages that arrived while the server was starting
+            // (e.g. a providers/list from an early-opened Settings tab).
+            if (status === EcaServerStatus.Running) {
+                void flushNotReadyQueue(session.id);
+            }
         };
 
         conn.onNotification(rpc.chatContentReceived, (params) => {
@@ -470,6 +475,46 @@ export function createBridge(
 
     // ── Renderer → Server (IPC dispatch) ──
 
+    // Messages that arrive while the session's server is still starting
+    // (status != Running) are queued here and replayed — in order,
+    // through the same processing path — once the server reports
+    // Running (see registerServerNotifications). Dropping them instead
+    // used to leave request/response flows hanging: e.g. opening
+    // Settings → Providers during startup dropped `providers/list` and
+    // the webview waited 30s for a reply that never came. The webview's
+    // own webviewSendAndGet timeout bounds the staleness of anything
+    // queued for too long.
+    const notReadyQueue = new Map<string, IpcMessage[]>();
+    const MAX_QUEUED_MESSAGES = 50;
+
+    sessionManager.on('session-removed', (sessionId: string) => {
+        notReadyQueue.delete(sessionId);
+    });
+
+    function queueNotReadyMessage(sessionId: string, message: IpcMessage): void {
+        const queue = notReadyQueue.get(sessionId) ?? [];
+        if (queue.length >= MAX_QUEUED_MESSAGES) {
+            console.warn('[Bridge] Server not ready and queue full, dropping message:', message.type);
+            return;
+        }
+        queue.push(message);
+        notReadyQueue.set(sessionId, queue);
+        console.log('[Bridge] Server not ready, queueing message:', message.type);
+    }
+
+    async function flushNotReadyQueue(sessionId: string): Promise<void> {
+        const queued = notReadyQueue.get(sessionId);
+        if (!queued || queued.length === 0) return;
+        notReadyQueue.delete(sessionId);
+        console.log(`[Bridge] Server ready, replaying ${queued.length} queued message(s)`);
+        for (const message of queued) {
+            // Sequential to preserve order. If the server flapped back
+            // to not-Running mid-flush, messages re-queue for the next
+            // Running transition (no loop: flush only runs on transition).
+            await processWebviewMessage(message);
+        }
+    }
+
     ipcMain.on('webview-message', async (event, message: IpcMessage) => {
         // Defense-in-depth: only accept webview-message IPC from our own
         // main window's webContents. Blocks any loaded frame / popup /
@@ -486,6 +531,10 @@ export function createBridge(
             return;
         }
 
+        await processWebviewMessage(message);
+    });
+
+    async function processWebviewMessage(message: IpcMessage): Promise<void> {
         // ── Logs (handled locally, no server connection required) ──
         //
         // These live before the session/conn check so the Logs tab stays
@@ -522,15 +571,25 @@ export function createBridge(
         const session = (typeof msgChatId === 'string'
             ? sessionManager.getSessionForChat(msgChatId)
             : undefined) ?? getActiveSession();
-        const conn = session?.ecaServer.connection ?? null;
 
-        if (!conn) {
-            console.error('[Bridge] No active server connection, dropping message:', message.type);
+        if (!session) {
+            console.error('[Bridge] No active session, dropping message:', message.type);
             return;
         }
 
-        if (session!.ecaServer.status !== EcaServerStatus.Running && message.type !== 'webview/ready') {
-            console.warn('[Bridge] Server not ready, dropping message:', message.type);
+        const conn = session.ecaServer.connection ?? null;
+
+        // Not ready yet (still spawning / initializing, or the connection
+        // isn't even up) — queue for replay on the Running transition.
+        // `webview/ready` is exempt: rehydration works during startup.
+        if (message.type !== 'webview/ready'
+            && (!conn || session.ecaServer.status !== EcaServerStatus.Running)) {
+            queueNotReadyMessage(session.id, message);
+            return;
+        }
+
+        if (!conn) {
+            console.error('[Bridge] No active server connection, dropping message:', message.type);
             return;
         }
 
@@ -538,8 +597,8 @@ export function createBridge(
             conn,
             sendToRenderer,
             mainWindow,
-            chatState: session!.chatState,
-            workspaceFolders: [session!.workspaceFolder],
+            chatState: session.chatState,
+            workspaceFolders: [session.workspaceFolder],
         };
 
         try {
@@ -556,8 +615,8 @@ export function createBridge(
                 // they are already in the rehydration cache replayed
                 // below, and flushing them here would double-apply them.
                 discardPendingContentEvents();
-                sendSessionContext(session!);
-                session!.chatState.rehydrate(sendToRenderer, [session!.workspaceFolder]);
+                sendSessionContext(session);
+                session.chatState.rehydrate(sendToRenderer, [session.workspaceFolder]);
                 // After the chats are open in the webview, replay any
                 // per-chat `config/updated` overrides so each chat's
                 // selectedModel / selectTrust survives the reload. The
@@ -565,7 +624,7 @@ export function createBridge(
                 // aren't in the slice yet, so order vs. rehydrate is
                 // safe either way — we replay after to minimise wasted
                 // work on chats the user never opened.
-                const perChatConfigs = perChatConfigCache.get(session!.id);
+                const perChatConfigs = perChatConfigCache.get(session.id);
                 if (perChatConfigs) {
                     for (const config of perChatConfigs.values()) {
                         sendToRenderer('config/updated', config);
@@ -601,7 +660,7 @@ export function createBridge(
         } catch (err) {
             console.error(`[Bridge] Error handling ${message.type}:`, err);
         }
-    });
+    }
 
     // ── Helpers: send full session context to renderer ──
 

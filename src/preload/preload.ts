@@ -191,6 +191,12 @@ contextBridge.exposeInMainWorld('ecaDesktop', {
         if (index !== -1) sidebarCollapseListeners.splice(index, 1);
     },
 
+    // ── Input dialog (editor/readInput modal window) ──
+    getInputDialogConfig: () => ipcRenderer.invoke('input-dialog:get-config'),
+    submitInputDialog: (value: string | null) => {
+        ipcRenderer.send('input-dialog:submit', value);
+    },
+
     // ── Preferences (request/response via invoke/handle) ──
     getPreferences: () => ipcRenderer.invoke('preferences:get'),
     setPreferences: (patch: Partial<Preferences>) => ipcRenderer.invoke('preferences:set', patch),

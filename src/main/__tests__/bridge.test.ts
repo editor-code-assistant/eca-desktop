@@ -468,4 +468,85 @@ describe('bridge', () => {
             expect(ctx.conn).toBe(activeConn);
         });
     });
+
+    describe('not-ready message queueing', () => {
+        function setupStartingSession() {
+            const session = makeFakeSession('s-1');
+            session.ecaServer.status = 'Starting';
+            session.ecaServer.connection = makeFakeConnection();
+            const sessionManager = makeFakeSessionManager([session]);
+            const mainWindow = makeFakeMainWindow(1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const bridge = createBridge(mainWindow as any, sessionManager as any);
+            // Installs the bridge's onStatusChanged (the one that flushes).
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            bridge.registerServerNotifications(session as any);
+            const handler = ipcHandlers.get('webview-message')!;
+            return { session, sessionManager, mainWindow, handler };
+        }
+
+        it('queues messages while the server is starting and replays them on Running', async () => {
+            const { session, handler } = setupStartingSession();
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+            await handler({ sender: { id: 1 } }, { type: 'providers/list', data: { requestId: 'r-1' } });
+            expect(dispatchMock).not.toHaveBeenCalled();
+
+            // Server finishes initializing
+            session.ecaServer.status = 'Running';
+            session.ecaServer.onStatusChanged('Running');
+
+            await vi.waitFor(() => expect(dispatchMock).toHaveBeenCalledOnce());
+            const [, msg] = dispatchMock.mock.calls[0] as unknown[];
+            expect(msg).toEqual({ type: 'providers/list', data: { requestId: 'r-1' } });
+            log.mockRestore();
+        });
+
+        it('replays queued messages in arrival order', async () => {
+            const { session, handler } = setupStartingSession();
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+            await handler({ sender: { id: 1 } }, { type: 'providers/list', data: { requestId: 'r-1' } });
+            await handler({ sender: { id: 1 } }, { type: 'jobs/list', data: { requestId: 'r-2' } });
+
+            session.ecaServer.status = 'Running';
+            session.ecaServer.onStatusChanged('Running');
+
+            await vi.waitFor(() => expect(dispatchMock).toHaveBeenCalledTimes(2));
+            const types = dispatchMock.mock.calls.map((c) => ((c as unknown[])[1] as { type: string }).type);
+            expect(types).toEqual(['providers/list', 'jobs/list']);
+            log.mockRestore();
+        });
+
+        it('still serves webview/ready while the server is starting', async () => {
+            const { session, handler } = setupStartingSession();
+
+            await handler({ sender: { id: 1 } }, { type: 'webview/ready', data: {} });
+
+            // Rehydration ran immediately — not queued.
+            expect(session.chatState.rehydrate).toHaveBeenCalledOnce();
+
+            session.ecaServer.status = 'Running';
+            session.ecaServer.onStatusChanged('Running');
+            await new Promise((r) => setTimeout(r, 0));
+
+            // Nothing was queued, so nothing is dispatched on flush.
+            expect(dispatchMock).not.toHaveBeenCalled();
+        });
+
+        it('drops the queue when the session is removed', async () => {
+            const { session, sessionManager, handler } = setupStartingSession();
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+            await handler({ sender: { id: 1 } }, { type: 'providers/list', data: { requestId: 'r-1' } });
+            sessionManager.emit('session-removed', 's-1');
+
+            session.ecaServer.status = 'Running';
+            session.ecaServer.onStatusChanged('Running');
+            await new Promise((r) => setTimeout(r, 0));
+
+            expect(dispatchMock).not.toHaveBeenCalled();
+            log.mockRestore();
+        });
+    });
 });

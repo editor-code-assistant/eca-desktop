@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- Handle `editor/readInput` from the webview with a native modal input
+  dialog (text/secret input or method pick list), fixing provider login
+  on Settings → Providers which previously logged
+  "[Router] Unhandled message type: editor/readInput" and hung.
+- Queue webview messages that arrive while the ECA server is still
+  starting and replay them once it reaches Running, instead of dropping
+  them ("Server not ready, dropping message: providers/list") and
+  leaving request/response UIs (e.g. the Providers tab) hanging on the
+  30s webview timeout.
 - Stop button now takes effect promptly during fast streaming (#11).
   Streamed `chat/contentReceived` events are coalesced in the main process
   and delivered as `chat/batchContentReceived` batches (~30/s), so the
