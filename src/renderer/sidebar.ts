@@ -100,9 +100,12 @@ declare global {
 
     // ── Collapse toggle button (sits over the sidebar's vertical separator) ──
 
+    // Menu accelerator is CmdOrCtrl+B; show the right symbol per platform.
+    const shortcutLabel = window.ecaDesktop?.platform === 'darwin' ? '⌘B' : 'Ctrl+B';
+
     const collapseBtn = document.createElement('button');
     collapseBtn.className = 'sidebar-collapse-btn';
-    collapseBtn.title = 'Toggle sidebar (⌘B)';
+    collapseBtn.title = `Toggle sidebar (${shortcutLabel})`;
     collapseBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 6 9 12 15 18"/>
     </svg>`;
@@ -127,7 +130,7 @@ declare global {
             : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="15 6 9 12 15 18"/>
             </svg>`;
-        collapseBtn.title = collapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)';
+        collapseBtn.title = collapsed ? `Expand sidebar (${shortcutLabel})` : `Collapse sidebar (${shortcutLabel})`;
         // Re-render so the DOM reflects collapsed vs expanded layout
         // (avatars are only created when isCollapsed is true)
         render();

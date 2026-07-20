@@ -68,12 +68,12 @@ describe('getGlobalConfigPath', () => {
         );
     });
 
-    it('uses APPDATA on win32 when set', async () => {
+    it('ignores APPDATA on win32 (matches the eca server, which only reads XDG/~/.config)', async () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
         process.env.APPDATA = 'C:\\Users\\Test\\AppData\\Roaming';
         const { getGlobalConfigPath } = await loadConstants();
         expect(getGlobalConfigPath()).toBe(
-            path.join('C:\\Users\\Test\\AppData\\Roaming', 'eca', 'config.json'),
+            path.join(os.homedir(), '.config', 'eca', 'config.json'),
         );
     });
 

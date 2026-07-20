@@ -54,16 +54,18 @@
     align-items: center;
     gap: 8px;
     padding: 14px 12px;
-    -webkit-app-region: drag;
 }
 
 /* macOS toolbar zone.
    TOOLBAR_HEIGHT = 38px (mirrored from main.ts).
    Traffic lights are vertically centered within this zone by Electron.
    The sidebar header must reserve this space so content doesn't overlap.
-   --sidebar-toolbar-h drives the partial divider's starting point. */
+   --sidebar-toolbar-h drives the partial divider's starting point.
+   The drag region is darwin-only: Windows/Linux use the native titlebar,
+   and a second drag strip would swallow clicks in the header. */
 .platform-darwin .sidebar-header {
     padding-top: 38px;
+    -webkit-app-region: drag;
 }
 .platform-darwin .sidebar {
     --sidebar-toolbar-h: 38px;

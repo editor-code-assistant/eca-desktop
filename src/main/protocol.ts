@@ -438,6 +438,11 @@ export interface RecentWorkspace {
     uri: string;
     name: string;
     lastOpened: number;
+    /**
+     * Human-friendly path computed main-side when sending welcome-data
+     * (native separators, decoded, `~`-shortened on POSIX). Not persisted.
+     */
+    displayPath?: string;
 }
 
 export interface WelcomeData {

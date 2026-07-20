@@ -36,10 +36,14 @@ export function getDataDir(): string {
  *
  * Resolution order:
  *   1. `ECA_CONFIG_PATH` environment variable (absolute path), if set.
+ *      (Desktop-only override; the eca server has no such variable.)
  *   2. `$XDG_CONFIG_HOME/eca/config.json` if `XDG_CONFIG_HOME` is set.
- *   3. Platform default:
- *      - win32:   `%APPDATA%\eca\config.json` (falls back to `~/.config/eca/config.json`)
- *      - others (macOS, Linux):  `~/.config/eca/config.json`
+ *   3. `~/.config/eca/config.json` on ALL platforms, including Windows.
+ *
+ * 2-3 deliberately mirror the eca server's own resolution
+ * (`eca.shared/global-config-dir`: XDG_CONFIG_HOME, else ~/.config/eca —
+ * it never reads %APPDATA%). The desktop used to prefer %APPDATA% on
+ * win32, which made it edit a config the server never read.
  *
  * Note: this does not touch the filesystem. Creation is the caller's
  * responsibility.
@@ -53,13 +57,6 @@ export function getGlobalConfigPath(): string {
     const xdg = process.env.XDG_CONFIG_HOME;
     if (xdg && xdg.trim().length > 0) {
         return path.join(xdg, 'eca', 'config.json');
-    }
-
-    if (process.platform === 'win32') {
-        const appData = process.env.APPDATA;
-        if (appData && appData.trim().length > 0) {
-            return path.join(appData, 'eca', 'config.json');
-        }
     }
 
     return path.join(os.homedir(), '.config', 'eca', 'config.json');

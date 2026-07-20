@@ -17,6 +17,8 @@ interface RecentWorkspace {
     uri: string;
     name: string;
     lastOpened: number;
+    /** Precomputed main-side (native separators, decoded, ~-shortened). */
+    displayPath?: string;
 }
 
 interface WelcomeData {
@@ -224,17 +226,14 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
         rainColumns = [];
     }
 
+    // Fallback only — recents normally arrive with a main-side computed
+    // `displayPath` (see welcome-data in main.ts).
     function formatPath(uri: string): string {
         try {
-            const pathname = new URL(uri).pathname;
-            // Shorten home directory
-            const home = '/home/';
-            const homeIdx = pathname.indexOf(home);
-            if (homeIdx === 0) {
-                const parts = pathname.substring(home.length).split('/');
-                if (parts.length > 1) {
-                    return '~/' + parts.slice(1).join('/');
-                }
+            let pathname = decodeURIComponent(new URL(uri).pathname);
+            // Windows file URIs carry a spurious leading slash (/C:/...).
+            if (/^\/[A-Za-z]:\//.test(pathname)) {
+                pathname = pathname.slice(1).replace(/\//g, '\\');
             }
             return pathname;
         } catch {
@@ -402,7 +401,7 @@ type WelcomeWindow = Window & { ecaDesktop?: WelcomeEcaDesktopApi };
 
                 const pathEl = document.createElement('span');
                 pathEl.className = 'welcome-recent-path';
-                pathEl.textContent = formatPath(ws.uri);
+                pathEl.textContent = ws.displayPath ?? formatPath(ws.uri);
 
                 info.appendChild(name);
                 info.appendChild(pathEl);
