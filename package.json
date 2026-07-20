@@ -3,7 +3,15 @@
   "productName": "ECA",
   "version": "0.8.1",
   "description": "ECA Desktop - AI Code Assistant",
-  "author": "Editor Code Assistant",
+  "author": {
+    "name": "Editor Code Assistant",
+    "url": "https://eca.dev"
+  },
+  "homepage": "https://eca.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/editor-code-assistant/eca-desktop.git"
+  },
   "license": "Apache-2.0",
   "main": "dist/main.js",
   "private": true,
@@ -33,6 +41,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win --x64 --publish never",
+    "package:win:dir": "npm run build && electron-builder --win --x64 --dir --publish never",
     "start": "node dist/launch-electron.js .",
     "package:mac": "npm run build && electron-builder --mac",
     "package:linux": "npm run build && electron-builder --linux"
