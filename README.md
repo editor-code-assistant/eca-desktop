@@ -3,7 +3,7 @@
 [![CI](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/editor-code-assistant/eca-desktop?label=latest)](https://github.com/editor-code-assistant/eca-desktop/releases/latest)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
 ![demo](./demo.gif)
 
@@ -22,12 +22,19 @@ Grab the latest installer for your platform from [**GitHub Releases**](https://g
 
 | Platform | Architecture          | Formats              |
 |----------|-----------------------|----------------------|
+| Windows  | x64                   | `.exe` (NSIS)        |
 | macOS    | Intel (x64)           | `.dmg`, `.zip`       |
 | macOS    | Apple Silicon (arm64) | `.dmg`, `.zip`       |
 | Linux    | x64                   | `.AppImage`, `.deb`  |
 | Linux    | arm64                 | `.AppImage`, `.deb`  |
 
 Release assets are published with [SLSA build provenance](https://slsa.dev/) so you can verify they were built by this repository's CI.
+
+The Windows x64 installer is currently unsigned. Windows SmartScreen may show an
+"Unknown publisher" warning; review the release checksum before choosing
+**More info > Run anyway**. The assisted installer supports per-user or
+per-machine installation, upgrades an existing ECA installation in place, and
+keeps application settings when ECA is uninstalled.
 
 > **Auto-updates:** `.dmg`, `.zip`, and `.AppImage` update in place via `electron-updater`.
 > `.deb` does **not** auto-update — upgrade by downloading a fresh `.deb` from Releases.
@@ -44,8 +51,8 @@ Check [troubleshooting](https://eca.dev/troubleshooting) docs section.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+
-- npm
+- [Node.js](https://nodejs.org/) 24
+- npm 11
 
 ### Setup
 
@@ -93,6 +100,7 @@ ECA_WEBVIEW_URL=http://localhost:6000 npm run dev:app
 
 ```bash
 npm run package           # current platform
+npm run package:win       # Windows x64 NSIS installer
 npm run package:mac       # macOS
 npm run package:linux     # Linux
 ```
@@ -107,7 +115,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 |----------|--------|
 | macOS (Intel & Apple Silicon) | ✅ Supported |
 | Linux (x64 & arm64) | ✅ Supported |
-| Windows | 🔮 Planned |
+| Windows (x64) | ✅ Supported (unsigned installer) |
+| Windows (arm64) | Not supported |
 
 ## Contributing 💙
 

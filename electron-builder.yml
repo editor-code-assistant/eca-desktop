@@ -12,6 +12,28 @@ files:
   - resources/**/*
   - src/renderer/**/*
 
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  requestedExecutionLevel: asInvoker
+  signExecutable: false
+
+nsis:
+  artifactName: eca-windows-${arch}-${version}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: ECA
+  uninstallDisplayName: ECA
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+
 mac:
   category: public.app-category.developer-tools
   icon: resources/icon.png
