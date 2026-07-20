@@ -10,7 +10,11 @@ import { openPreferencesWindow } from './preferences-window';
 // variables. See code-review M-1.
 const IS_DEV = !app.isPackaged;
 
-export function createMenu(mainWindow: BrowserWindow) {
+export interface MenuActions {
+    toggleSidebarCollapse(): void;
+}
+
+export function createMenu(mainWindow: BrowserWindow, actions: MenuActions) {
     const isMac = process.platform === 'darwin';
 
     // Forward a message to the webview (consumed by RootWrapper via
@@ -147,10 +151,7 @@ export function createMenu(mainWindow: BrowserWindow) {
                 {
                     label: 'Toggle Sidebar',
                     accelerator: 'CmdOrCtrl+B',
-                    click: () => {
-                        const toggle = (global as any).__ecaToggleSidebarCollapse;
-                        if (typeof toggle === 'function') toggle();
-                    },
+                    click: actions.toggleSidebarCollapse,
                 },
                 {
                     // Inner-webview sidebar toggle (distinct from the native

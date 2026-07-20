@@ -41,8 +41,12 @@ interface MenuItem {
     accelerator?: string;
     role?: string;
     type?: string;
+    click?: () => void;
     submenu?: MenuItem[];
 }
+
+const toggleSidebarCollapse = vi.fn();
+const menuActions = { toggleSidebarCollapse };
 
 /** Flatten a menu template (and any nested submenus) into a single array. */
 function walkItems(items: MenuItem[]): MenuItem[] {
@@ -80,7 +84,7 @@ describe('menu.ts — createMenu template', () => {
 
     async function loadAndBuild() {
         const { createMenu } = await import('../menu');
-        createMenu(makeFakeWindow());
+        createMenu(makeFakeWindow(), menuActions);
         expect(buildFromTemplate).toHaveBeenCalledTimes(1);
         const template = buildFromTemplate.mock.calls[0][0] as MenuItem[];
         return walkItems(template);
@@ -88,7 +92,7 @@ describe('menu.ts — createMenu template', () => {
 
     it('calls Menu.buildFromTemplate and Menu.setApplicationMenu', async () => {
         const { createMenu } = await import('../menu');
-        createMenu(makeFakeWindow());
+        createMenu(makeFakeWindow(), menuActions);
         expect(buildFromTemplate).toHaveBeenCalledTimes(1);
         expect(setApplicationMenu).toHaveBeenCalledTimes(1);
     });
@@ -112,6 +116,16 @@ describe('menu.ts — createMenu template', () => {
         expect(duplicates, `Duplicate accelerators: ${JSON.stringify(duplicates)}`).toEqual([]);
     });
 
+    it('invokes the injected sidebar action from the View menu', async () => {
+        const flat = await loadAndBuild();
+        const toggleItem = flat.find((item) => item.label === 'Toggle Sidebar');
+
+        expect(toggleItem?.click).toBeTypeOf('function');
+        toggleItem?.click?.();
+
+        expect(toggleSidebarCollapse).toHaveBeenCalledOnce();
+    });
+
     it('omits toggleDevTools in packaged (production) builds', async () => {
         mockApp.isPackaged = true;
         const flat = await loadAndBuild();
@@ -128,7 +142,7 @@ describe('menu.ts — createMenu template', () => {
 
     it('contains the expected top-level menus', async () => {
         const { createMenu } = await import('../menu');
-        createMenu(makeFakeWindow());
+        createMenu(makeFakeWindow(), menuActions);
         const template = buildFromTemplate.mock.calls[0][0] as MenuItem[];
         const labels = template.map((t) => t.label).filter(Boolean);
         // File/Edit/View/Chat/Window/Help are always present; app menu

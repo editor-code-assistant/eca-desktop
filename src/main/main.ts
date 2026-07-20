@@ -248,8 +248,6 @@ async function main(): Promise<void> {
     });
   }
 
-  createMenu(mainWindow);
-
   const sessionManager = new SessionManager(preferencesStore);
   const sessionStore = new SessionStore();
   const bridge = createBridge(mainWindow, sessionManager);
@@ -324,8 +322,8 @@ async function main(): Promise<void> {
     toggleSidebarCollapse();
   });
 
-  // Expose for the menu accelerator (View > Toggle Sidebar)
-  (global as any).__ecaToggleSidebarCollapse = toggleSidebarCollapse;
+  const menuActions = { toggleSidebarCollapse };
+  createMenu(mainWindow, menuActions);
 
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('welcome-data', {
@@ -482,7 +480,7 @@ async function main(): Promise<void> {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const newWindow = createWindow();
-      createMenu(newWindow);
+      createMenu(newWindow, menuActions);
       // Bridge and sessions are managed separately
     }
   });
