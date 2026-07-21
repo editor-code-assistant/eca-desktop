@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- Stop button unresponsive while tokens stream fast, via eca-webview bump
+  (editor-code-assistant/eca-webview#18): stable message props and
+  memoized, deferred markdown rendering stop the chat from re-parsing
+  every message per streamed batch. Also picks up the per-chat model
+  selection fix (editor-code-assistant/eca-webview#19).
 - Chat UI bugs via eca-webview bump (editor-code-assistant/eca-webview#20):
   duplicate flags on a message, Thinking stuck after stop, selectable
   card headers, expand animation overshoot, rollback flicker. Rollback
