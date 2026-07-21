@@ -142,6 +142,10 @@ const routes: Record<string, RouteHandler> = {
         ctx.conn.sendNotification(rpcTypes.chatPromptSteer, data);
     },
 
+    'chat/promptSteerRemove': (ctx, data) => {
+        ctx.conn.sendNotification(rpcTypes.chatPromptSteerRemove, { chatId: data.chatId });
+    },
+
     'chat/selectedModelChanged': (ctx, data) => {
         ctx.conn.sendNotification(rpcTypes.chatSelectedModelChanged, data);
     },

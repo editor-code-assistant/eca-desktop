@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- Chat UI bugs via eca-webview bump (editor-code-assistant/eca-webview#20):
+  duplicate flags on a message, Thinking stuck after stop, selectable
+  card headers, expand animation overshoot, rollback flicker. Rollback
+  now refills the prompt input, user messages have a copy button in an
+  actions row below the card, and the pending steering message can be
+  removed or edited (routed via new `chat/promptSteerRemove`).
 - Handle `editor/readInput` from the webview with a native modal input
   dialog (text/secret input or method pick list), fixing provider login
   on Settings → Providers which previously logged

@@ -485,6 +485,7 @@ export type IpcMessageType =
     | 'chat/toolCallReject'
     | 'chat/promptStop'
     | 'chat/promptSteer'
+    | 'chat/promptSteerRemove'
     | 'chat/selectedModelChanged'
     | 'chat/selectedAgentChanged'
     | 'chat/answerQuestion'

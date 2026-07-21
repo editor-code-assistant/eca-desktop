@@ -73,6 +73,7 @@ export const chatToolCallApprove = new rpc.NotificationType<ChatToolCallParams>(
 export const chatToolCallReject = new rpc.NotificationType<ChatToolCallParams>('chat/toolCallReject');
 export const chatPromptStop = new rpc.NotificationType<ChatPromptStopParams>('chat/promptStop');
 export const chatPromptSteer = new rpc.NotificationType<ChatSteerParams>('chat/promptSteer');
+export const chatPromptSteerRemove = new rpc.NotificationType<ChatPromptStopParams>('chat/promptSteerRemove');
 export const chatSelectedModelChanged = new rpc.NotificationType<ChatModelChangedParams>('chat/selectedModelChanged');
 export const chatSelectedAgentChanged = new rpc.NotificationType<ChatAgentChangedParams>('chat/selectedAgentChanged');
 
