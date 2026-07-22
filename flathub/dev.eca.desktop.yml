@@ -51,8 +51,8 @@ modules:
       - type: file
         dest-filename: eca-desktop.deb
         only-arches: [x86_64]
-        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.9/eca-linux-amd64.deb
-        sha256: b52be8c7401ab4180a3851d0547577bc7d283f75ecfbfa667f6e13ab53865390
+        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.10/eca-linux-amd64.deb
+        sha256: 16ff34228351859e17b8ca26133880bfa1867372faa706e4d8787a291a64a6a3
         x-checker-data:
           type: json
           url: https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest
@@ -62,8 +62,8 @@ modules:
       - type: file
         dest-filename: eca-desktop.deb
         only-arches: [aarch64]
-        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.9/eca-linux-arm64.deb
-        sha256: e3270e8906f6df4d180f6ed7a815e90be38d961213e194d51fa6cca019a2022e
+        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.10/eca-linux-arm64.deb
+        sha256: 88da55ae68d0029db2fb945977054ea9df3e12aaf5bbd414c66da83a87ce470f
         x-checker-data:
           type: json
           url: https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest
