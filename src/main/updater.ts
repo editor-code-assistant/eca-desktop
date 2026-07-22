@@ -2,7 +2,19 @@ import type { BrowserWindow} from 'electron';
 import { dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
+import { isFlatpak } from './flatpak';
+
 export function setupAutoUpdater(mainWindow: BrowserWindow) {
+    // Flatpak owns app updates (`flatpak update` / software centers);
+    // electron-updater has no Flatpak support and would try to replace
+    // files inside the read-only /app mount. The managed ECA *server*
+    // binary in ~/.eca-desktop keeps auto-updating independently (see
+    // server.ts ensureServer).
+    if (isFlatpak()) {
+        console.log('[Updater] Flatpak detected — app updates are handled by Flatpak; skipping electron-updater.');
+        return;
+    }
+
     // Configure auto-updater
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;

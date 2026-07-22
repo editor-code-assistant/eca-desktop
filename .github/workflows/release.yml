@@ -116,9 +116,39 @@ jobs:
           fi
           npx electron-builder --mac --x64 --arm64 --publish always
 
+      - name: Cache flatpak runtimes (Linux)
+        if: matrix.platform == 'linux'
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/flatpak
+          key: ${{ runner.os }}-flatpak-24.08
+
+      - name: Install flatpak tooling (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder elfutils
+          # Ubuntu 24.04 runners restrict unprivileged user namespaces,
+          # which flatpak-builder needs (bwrap).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --or-update flathub \
+            org.freedesktop.Platform//24.08 \
+            org.freedesktop.Sdk//24.08 \
+            org.electronjs.Electron2.BaseApp//24.08
+
       - name: Package & Publish (Linux)
         if: matrix.platform == 'linux'
         run: npx electron-builder --linux --x64 --arm64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package & Publish (Linux Flatpak)
+        if: matrix.platform == 'linux'
+        # Experimental target — don't fail a whole release over it;
+        # AppImage/deb were already published by the previous step.
+        continue-on-error: true
+        run: npx electron-builder --linux flatpak --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -143,6 +173,7 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.deb
+            release/*.flatpak
             release/*.exe
 
   publish-release:

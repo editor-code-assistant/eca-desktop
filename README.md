@@ -20,17 +20,25 @@ This app will auto download `eca` and manage the process.
 
 Grab the latest installer for your platform from [**GitHub Releases**](https://github.com/editor-code-assistant/eca-desktop/releases/latest):
 
-| Platform | Architecture          | Formats              |
-|----------|-----------------------|----------------------|
-| macOS    | Intel (x64)           | `.dmg`, `.zip`       |
-| macOS    | Apple Silicon (arm64) | `.dmg`, `.zip`       |
-| Linux    | x64                   | `.AppImage`, `.deb`  |
-| Linux    | arm64                 | `.AppImage`, `.deb`  |
+| Platform | Architecture          | Formats                         |
+|----------|-----------------------|---------------------------------|
+| macOS    | Intel (x64)           | `.dmg`, `.zip`                  |
+| macOS    | Apple Silicon (arm64) | `.dmg`, `.zip`                  |
+| Linux    | x64                   | `.AppImage`, `.deb`, `.flatpak` |
+| Linux    | arm64                 | `.AppImage`, `.deb`             |
+
+For the Flatpak bundle:
+
+```bash
+flatpak install --user ./eca-linux-x64.flatpak
+flatpak run dev.eca.desktop
+```
 
 Release assets are published with [SLSA build provenance](https://slsa.dev/) so you can verify they were built by this repository's CI.
 
 > **Auto-updates:** `.dmg`, `.zip`, and `.AppImage` update in place via `electron-updater`.
 > `.deb` does **not** auto-update — upgrade by downloading a fresh `.deb` from Releases.
+> `.flatpak` app updates are owned by Flatpak — until ECA is on Flathub, upgrade by installing a fresh bundle. The managed `eca` server keeps auto-updating in every format.
 
 ## Settings
 
@@ -94,10 +102,20 @@ ECA_WEBVIEW_URL=http://localhost:6000 npm run dev:app
 ```bash
 npm run package           # current platform
 npm run package:mac       # macOS
-npm run package:linux     # Linux
+npm run package:linux     # Linux (AppImage + deb)
+npm run package:flatpak   # Linux (Flatpak bundle, x64)
 ```
 
 Installers are written to `release/`.
+
+The Flatpak target additionally requires `flatpak` and `flatpak-builder` installed, plus the shared runtimes:
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 org.electronjs.Electron2.BaseApp//24.08
+```
+
+When sandboxed, the app spawns the `eca` server on the **host** via `flatpak-spawn --host` (permission `--talk-name=org.freedesktop.Flatpak`) so the agent can use your real toolchain (git, shells, MCP servers), falling back to an in-sandbox server if the portal is unavailable.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 

@@ -6,6 +6,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { isFlatpakPrivateXdgDir } from './flatpak';
+
 // ── GitHub / Server ──
 
 export const GITHUB_RELEASES_API = 'https://api.github.com/repos/editor-code-assistant/eca/releases';
@@ -37,7 +39,11 @@ export function getDataDir(): string {
  * Resolution order:
  *   1. `ECA_CONFIG_PATH` environment variable (absolute path), if set.
  *      (Desktop-only override; the eca server has no such variable.)
- *   2. `$XDG_CONFIG_HOME/eca/config.json` if `XDG_CONFIG_HOME` is set.
+ *   2. `$XDG_CONFIG_HOME/eca/config.json` if `XDG_CONFIG_HOME` is set —
+ *      unless it is the Flatpak per-app remap (`~/.var/app/<id>/config`),
+ *      which the sandbox always exports and no user chose. Honoring it
+ *      would make the desktop edit a config that the eca server (spawned
+ *      on the host under Flatpak) never reads.
  *   3. `~/.config/eca/config.json` on ALL platforms, including Windows.
  *
  * 2-3 deliberately mirror the eca server's own resolution
@@ -55,7 +61,7 @@ export function getGlobalConfigPath(): string {
     }
 
     const xdg = process.env.XDG_CONFIG_HOME;
-    if (xdg && xdg.trim().length > 0) {
+    if (xdg && xdg.trim().length > 0 && !isFlatpakPrivateXdgDir(xdg)) {
         return path.join(xdg, 'eca', 'config.json');
     }
 

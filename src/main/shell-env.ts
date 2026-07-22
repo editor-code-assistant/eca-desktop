@@ -25,6 +25,8 @@ import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as path from 'path';
 
+import { FLATPAK_SPAWN, detectHostShell, hostSpawnAvailable, isFlatpak, sanitizeEnvForHost } from './flatpak';
+
 export interface ResolveShellEnvOptions {
     /**
      * Maximum wall-clock time (ms) to wait for the shell to print its
@@ -139,8 +141,14 @@ function shellEscape(s: string): string {
 }
 
 async function doResolve(timeoutMs: number, log: (msg: string) => void): Promise<NodeJS.ProcessEnv> {
-    const shell = detectShell();
-    // Random marker so we can robustly extract the JSON payload from
+    // Under Flatpak, the env the (host-spawned) ECA server needs is the
+    // HOST login shell's, not the sandbox's — resolve it through
+    // flatpak-spawn. When the portal is unavailable the server falls
+    // back to an in-sandbox spawn too, so plain resolution below stays
+    // coherent with it.
+    const viaHost = isFlatpak() && await hostSpawnAvailable(log);
+    const shell = viaHost ? await detectHostShell(log) : detectShell();
+    // Random marker so we can robustly extract the payload from
     // anything else the user's dotfiles print to stdout (login banners,
     // `fastfetch`, fortune cookies, ...).
     const mark = `___ECA_SHELL_ENV_${crypto.randomBytes(8).toString('hex')}___`;
@@ -151,23 +159,38 @@ async function doResolve(timeoutMs: number, log: (msg: string) => void): Promise
     // tests) under `ELECTRON_RUN_AS_NODE=1` to JSON-stringify the
     // shell's env. Doing it in-process means we don't depend on any
     // tool being on the user's PATH (other than the shell itself).
+    // On the HOST that binary doesn't exist (it lives inside the
+    // sandbox image), so dump NUL-separated pairs via `env -0`
+    // (coreutils, present on any Linux host) instead.
     const execPath = shellEscape(process.execPath);
+    const payloadCmd = viaHost
+        ? 'env -0'
+        : `${execPath} -e 'process.stdout.write(JSON.stringify(process.env))'`;
     const command =
         `echo "${beginMark}"; `
-        + `${execPath} -e 'process.stdout.write(JSON.stringify(process.env))'; `
+        + `${payloadCmd}; `
         + `echo; `
         + `echo "${endMark}"`;
     const args = shellArgs(shell, command);
 
-    log(`Resolving shell env via ${shell} ${args.slice(0, -1).join(' ')} <cmd>`);
+    // flatpak-spawn forwards its own environment to the host command —
+    // sandbox-only vars must be dropped so they don't poison the host
+    // login shell (see sanitizeEnvForHost).
+    const spawnCmd = viaHost ? FLATPAK_SPAWN : shell;
+    const spawnArgs = viaHost ? ['--host', shell, ...args] : args;
+    const envTransform = viaHost ? sanitizeEnvForHost : undefined;
+
+    log(`Resolving ${viaHost ? 'HOST ' : ''}shell env via ${shell} ${args.slice(0, -1).join(' ')} <cmd>`);
 
     try {
-        const { stdout, stderr, code } = await spawnAndCollect(shell, args, timeoutMs, log);
+        const { stdout, stderr, code } = await spawnAndCollect(spawnCmd, spawnArgs, timeoutMs, log, envTransform);
         if (code !== 0) {
             log(`Shell exited with code ${code}. stderr: ${truncate(stderr, 500)}`);
             return {};
         }
-        const parsed = parseShellEnv(stdout, beginMark, endMark);
+        const parsed = viaHost
+            ? parseNulSeparatedEnv(stdout, beginMark, endMark)
+            : parseShellEnv(stdout, beginMark, endMark);
         if (!parsed) {
             log(`Could not parse shell env output. stdout head: ${truncate(stdout, 300)}`);
             return {};
@@ -212,6 +235,32 @@ function parseShellEnv(stdout: string, beginMark: string, endMark: string): Node
     }
 }
 
+/**
+ * Parse `env -0` output (NUL-terminated KEY=VALUE records) captured
+ * between the two markers. Used for HOST resolution under Flatpak,
+ * where the in-process JSON dump isn't possible (process.execPath
+ * doesn't exist on the host). The NUL termination is what keeps
+ * values containing newlines unambiguous.
+ */
+function parseNulSeparatedEnv(stdout: string, beginMark: string, endMark: string): NodeJS.ProcessEnv | null {
+    const start = stdout.indexOf(beginMark);
+    const end = stdout.indexOf(endMark);
+    if (start < 0 || end < 0 || end <= start) return null;
+    const raw = stdout.slice(start + beginMark.length, end);
+    const env: NodeJS.ProcessEnv = {};
+    for (const record of raw.split('\0')) {
+        // The first record carries the newline echoed after the begin
+        // marker (and the trailing chunk the one echoed before the end
+        // marker). Keys never legitimately start with a newline, so
+        // strip leading ones.
+        const entry = record.replace(/^\n+/, '');
+        const eq = entry.indexOf('=');
+        if (eq <= 0) continue;
+        env[entry.slice(0, eq)] = entry.slice(eq + 1);
+    }
+    return Object.keys(env).length > 0 ? env : null;
+}
+
 interface SpawnCollectResult {
     stdout: string;
     stderr: string;
@@ -230,22 +279,26 @@ function spawnAndCollect(
     args: string[],
     timeoutMs: number,
     log: (msg: string) => void,
+    envTransform?: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv,
 ): Promise<SpawnCollectResult> {
     return new Promise((resolve, reject) => {
+        const baseEnv: NodeJS.ProcessEnv = {
+            ...process.env,
+            // Marker so users can guard slow blocks (tmux auto-attach,
+            // ssh-agent startup, `nvm` shimming, ...) in their dotfiles
+            // like:
+            //   [ -z "$ECA_RESOLVING_ENVIRONMENT" ] && tmux attach
+            // VSCode uses the equivalent VSCODE_RESOLVING_ENVIRONMENT.
+            ECA_RESOLVING_ENVIRONMENT: '1',
+            // Force the inner Electron invocation (process.execPath) to
+            // behave as a normal Node binary. Has no effect on a real
+            // `node` binary, which is what runs in tests.
+            ELECTRON_RUN_AS_NODE: '1',
+        };
         const child = spawn(shell, args, {
-            env: {
-                ...process.env,
-                // Marker so users can guard slow blocks (tmux auto-attach,
-                // ssh-agent startup, `nvm` shimming, ...) in their dotfiles
-                // like:
-                //   [ -z "$ECA_RESOLVING_ENVIRONMENT" ] && tmux attach
-                // VSCode uses the equivalent VSCODE_RESOLVING_ENVIRONMENT.
-                ECA_RESOLVING_ENVIRONMENT: '1',
-                // Force the inner Electron invocation (process.execPath) to
-                // behave as a normal Node binary. Has no effect on a real
-                // `node` binary, which is what runs in tests.
-                ELECTRON_RUN_AS_NODE: '1',
-            },
+            // envTransform lets the Flatpak host path strip sandbox-only
+            // vars before flatpak-spawn forwards them to the host shell.
+            env: envTransform ? envTransform(baseEnv) : baseEnv,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 

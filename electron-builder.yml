@@ -39,6 +39,33 @@ deb:
   fpm:
     - "--after-install=build/linux-after-install.sh"
 
+# Built explicitly with `npm run package:flatpak` (or in CI with
+# `electron-builder --linux flatpak --x64`) so the default AppImage/deb
+# matrix above stays untouched. Requires `flatpak` + `flatpak-builder`
+# plus the runtimes/BaseApp installed (see README "Package" section).
+# The chromium sandbox is provided by zypak from the Electron BaseApp —
+# no SUID chrome-sandbox needed (linux-after-install.sh is deb-only).
+flatpak:
+  runtimeVersion: '24.08'
+  baseVersion: '24.08'
+  finishArgs:
+    # Windowing (X11/XWayland) + GPU.
+    - --share=ipc
+    - --socket=x11
+    - --device=dri
+    # ECA server download/auto-update, LLM providers, MCP servers.
+    - --share=network
+    # Project files + the managed server binary in ~/.eca-desktop and
+    # the shared eca config in ~/.config/eca.
+    - --filesystem=home
+    # Lets the app spawn the ECA server on the HOST (flatpak-spawn
+    # --host) so the agent can use the real toolchain: git, shells,
+    # user-configured MCP servers. Without it the app still works but
+    # the server runs sandboxed, seeing only the freedesktop runtime.
+    - --talk-name=org.freedesktop.Flatpak
+  files:
+    - ["build/dev.eca.desktop.metainfo.xml", "/share/metainfo/dev.eca.desktop.metainfo.xml"]
+
 win:
   icon: resources/icon.png
   target:

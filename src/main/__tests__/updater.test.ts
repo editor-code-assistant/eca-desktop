@@ -76,6 +76,21 @@ describe('setupAutoUpdater', () => {
         expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
     });
 
+    it('skips setup entirely under Flatpak (updates owned by Flatpak)', async () => {
+        const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        process.env.FLATPAK_ID = 'dev.eca.desktop';
+        try {
+            await loadAndSetup();
+            expect(updater.checkForUpdates).not.toHaveBeenCalled();
+            // Flags left at their unconfigured defaults — nothing touched.
+            expect(updater.autoDownload).toBe(true);
+            expect(updater.autoInstallOnAppQuit).toBe(false);
+        } finally {
+            delete process.env.FLATPAK_ID;
+            consoleLogSpy.mockRestore();
+        }
+    });
+
     it('shows an "Update Available" dialog and downloads when user accepts', async () => {
         showMessageBox.mockResolvedValueOnce({ response: 0 }); // click Download
         await loadAndSetup();

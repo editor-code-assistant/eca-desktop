@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata, bundled into the Flatpak. A Flathub submission
+     additionally requires <releases> and <screenshots>; add them in the
+     Flathub manifest repo when submitting. -->
+<component type="desktop-application">
+  <id>dev.eca.desktop</id>
+  <name>ECA</name>
+  <summary>AI pair programming client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <description>
+    <p>
+      ECA (Editor Code Assistant) Desktop is an AI-powered pair-programming
+      client that runs as a standalone desktop app, no editor required.
+      It connects to the eca server to provide interactive chat, code
+      suggestions, context management and more, downloading and updating
+      that server automatically.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.eca.desktop.desktop</launchable>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://eca.dev</url>
+  <url type="bugtracker">https://github.com/editor-code-assistant/eca-desktop/issues</url>
+  <url type="vcs-browser">https://github.com/editor-code-assistant/eca-desktop</url>
+  <developer id="dev.eca">
+    <name>Editor Code Assistant</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+</component>

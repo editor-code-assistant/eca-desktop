@@ -30,6 +30,7 @@ import {
     getDataDir,
 } from './constants';
 import type { PreferencesStore } from './preferences-store';
+import { FLATPAK_SPAWN, HOST_SPAWN_ARGS, hostSpawnAvailable, isFlatpak, sanitizeEnvForHost } from './flatpak';
 import { resolveShellEnv } from './shell-env';
 
 // ── GitHub release shape (narrow type guard) ──
@@ -902,14 +903,36 @@ export class EcaServer {
                 return;
             }
 
-            this.onLog(`Starting ECA server: ${serverPath}`);
-            const child = spawn(serverPath, ['server'], {
-                stdio: ['pipe', 'pipe', 'pipe'],
-                env: { ...process.env, ...shellEnv },
-                // Don't allocate a visible console window for the
-                // console-subsystem eca.exe on Windows.
-                windowsHide: true,
-            });
+            // Inside a Flatpak sandbox the user's toolchain (git, shells,
+            // MCP servers, ...) is invisible to in-sandbox children — a
+            // coding agent without git is useless. Spawn the server on
+            // the HOST through flatpak-spawn instead (see flatpak.ts for
+            // the full rationale: stdio forwarding keeps JSON-RPC intact,
+            // SIGTERM is forwarded, --watch-bus prevents orphans). Falls
+            // back to an in-sandbox spawn when the portal is unavailable;
+            // the probe result is cached, so restarts don't re-pay it.
+            const spawnOnHost = isFlatpak() && await hostSpawnAvailable(this.onLog);
+            checkpoint();
+            if (this._intentionalStop) {
+                this.onLog('Start aborted — stop() was called while probing flatpak-spawn.');
+                this.setStatus(EcaServerStatus.Stopped);
+                return;
+            }
+
+            const spawnEnv = { ...process.env, ...shellEnv };
+            this.onLog(`Starting ECA server: ${serverPath}${spawnOnHost ? ' (on host via flatpak-spawn)' : ''}`);
+            const child = spawnOnHost
+                ? spawn(FLATPAK_SPAWN, [...HOST_SPAWN_ARGS, serverPath, 'server'], {
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    env: sanitizeEnvForHost(spawnEnv),
+                })
+                : spawn(serverPath, ['server'], {
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    env: spawnEnv,
+                    // Don't allocate a visible console window for the
+                    // console-subsystem eca.exe on Windows.
+                    windowsHide: true,
+                });
             proc = child;
             this._proc = child;
 
