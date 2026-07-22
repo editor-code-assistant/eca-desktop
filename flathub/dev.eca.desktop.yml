@@ -1,0 +1,80 @@
+# Flathub manifest for ECA Desktop. See README.md in this directory for
+# how to test it locally and submit it to Flathub.
+#
+# Repackages the released debs (built and provenance-attested by this
+# repo's CI) instead of rebuilding from source. The x-checker-data
+# blocks let Flathub's update bot open version-bump PRs automatically
+# whenever a new GitHub release is published.
+app-id: dev.eca.desktop
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: eca-desktop
+separate-locales: false
+
+finish-args:
+  # Windowing: native Wayland when available (Electron auto-detects via
+  # WAYLAND_DISPLAY), X11/XWayland otherwise.
+  - --share=ipc
+  - --socket=wayland
+  - --socket=x11
+  - --device=dri
+  # ECA server download/auto-update, LLM providers, MCP servers.
+  - --share=network
+  # Project files + the managed server binary in ~/.eca-desktop and the
+  # shared eca config in ~/.config/eca.
+  - --filesystem=home
+  # Spawns the ECA server on the HOST (flatpak-spawn --host) so the
+  # coding agent can use the user's real toolchain: git, shells and
+  # user-configured MCP servers. Without it the app still runs, but the
+  # server would only see the freedesktop runtime.
+  - --talk-name=org.freedesktop.Flatpak
+
+modules:
+  - name: eca-desktop
+    buildsystem: simple
+    build-commands:
+      - ar x eca-desktop.deb
+      - tar -xf data.tar.xz
+      - cp -a opt/ECA /app/lib/dev.eca.desktop
+      - install -Dm755 eca-desktop.sh /app/bin/eca-desktop
+      - |
+        for f in usr/share/icons/hicolor/*/apps/eca-desktop.png; do
+          size="$(basename "$(dirname "$(dirname "$f")")")"
+          install -Dm644 "$f" "/app/share/icons/hicolor/${size}/apps/dev.eca.desktop.png"
+        done
+      - install -Dm644 dev.eca.desktop.desktop /app/share/applications/dev.eca.desktop.desktop
+      - install -Dm644 dev.eca.desktop.metainfo.xml /app/share/metainfo/dev.eca.desktop.metainfo.xml
+    sources:
+      - type: file
+        dest-filename: eca-desktop.deb
+        only-arches: [x86_64]
+        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.9/eca-linux-amd64.deb
+        sha256: b52be8c7401ab4180a3851d0547577bc7d283f75ecfbfa667f6e13ab53865390
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: '"https://github.com/editor-code-assistant/eca-desktop/releases/download/" + .tag_name + "/eca-linux-amd64.deb"'
+          is-main-source: true
+      - type: file
+        dest-filename: eca-desktop.deb
+        only-arches: [aarch64]
+        url: https://github.com/editor-code-assistant/eca-desktop/releases/download/v0.9.9/eca-linux-arm64.deb
+        sha256: e3270e8906f6df4d180f6ed7a815e90be38d961213e194d51fa6cca019a2022e
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: '"https://github.com/editor-code-assistant/eca-desktop/releases/download/" + .tag_name + "/eca-linux-arm64.deb"'
+      - type: script
+        dest-filename: eca-desktop.sh
+        commands:
+          - export TMPDIR="${XDG_RUNTIME_DIR}/app/${FLATPAK_ID}"
+          - exec zypak-wrapper /app/lib/dev.eca.desktop/eca-desktop "$@"
+      - type: file
+        path: dev.eca.desktop.desktop
+      - type: file
+        path: dev.eca.desktop.metainfo.xml

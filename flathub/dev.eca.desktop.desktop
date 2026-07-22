@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=ECA
+Comment=ECA Desktop - AI Code Assistant
+Exec=eca-desktop %U
+Terminal=false
+Type=Application
+Icon=dev.eca.desktop
+StartupWMClass=ECA
+Categories=Development;
