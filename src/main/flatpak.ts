@@ -26,7 +26,6 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
 
 export const FLATPAK_SPAWN = 'flatpak-spawn';
 
@@ -57,7 +56,9 @@ export function isFlatpak(): boolean {
  * eca server running on the host never sees.
  */
 export function isFlatpakPrivateXdgDir(dir: string): boolean {
-    return isFlatpak() && dir.includes(`${path.sep}.var${path.sep}app${path.sep}`);
+    // Flatpak is Linux-only; the remap is always a POSIX path (using
+    // path.sep here broke on Windows, where it is a backslash).
+    return isFlatpak() && dir.includes('/.var/app/');
 }
 
 /**
