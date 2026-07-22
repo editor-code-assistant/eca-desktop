@@ -26,7 +26,10 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
 
 linux:
-  icon: resources/icon.png
+  # Multi-size set (16-512px) generated from resources/icon.png; the
+  # flatpak target silently drops icons >512px, and a proper hicolor
+  # set is better for AppImage/deb desktop integration too.
+  icon: build/icons
   target:
     - target: AppImage
       arch: [x64, arm64]

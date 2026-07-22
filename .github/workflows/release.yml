@@ -127,7 +127,9 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder elfutils
+          # appstream/appstream-compose: flatpak-builder runs
+          # `appstreamcli compose` because we bundle a metainfo file.
+          sudo apt-get install -y flatpak flatpak-builder elfutils appstream appstream-compose
           # Ubuntu 24.04 runners restrict unprivileged user namespaces,
           # which flatpak-builder needs (bwrap).
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true

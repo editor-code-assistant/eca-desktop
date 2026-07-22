@@ -30,7 +30,7 @@ Grab the latest installer for your platform from [**GitHub Releases**](https://g
 For the Flatpak bundle:
 
 ```bash
-flatpak install --user ./eca-linux-x64.flatpak
+flatpak install --user ./eca-linux-x86_64.flatpak
 flatpak run dev.eca.desktop
 ```
 
@@ -108,7 +108,7 @@ npm run package:flatpak   # Linux (Flatpak bundle, x64)
 
 Installers are written to `release/`.
 
-The Flatpak target additionally requires `flatpak` and `flatpak-builder` installed, plus the shared runtimes:
+The Flatpak target additionally requires `flatpak`, `flatpak-builder` and `appstreamcli` (package `appstream`, plus `appstream-compose` on Debian/Ubuntu) installed, plus the shared runtimes:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
