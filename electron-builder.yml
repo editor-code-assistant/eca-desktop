@@ -52,8 +52,10 @@ flatpak:
   runtimeVersion: '24.08'
   baseVersion: '24.08'
   finishArgs:
-    # Windowing (X11/XWayland) + GPU.
+    # Windowing: native Wayland when available (Electron/Chromium
+    # auto-detects via WAYLAND_DISPLAY), X11/XWayland otherwise.
     - --share=ipc
+    - --socket=wayland
     - --socket=x11
     - --device=dri
     # ECA server download/auto-update, LLM providers, MCP servers.
