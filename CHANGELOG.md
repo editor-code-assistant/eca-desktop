@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Pasted images in the chat prompt now render as a removable thumbnail
+  chip in the contexts bar and are detached automatically once the
+  prompt is sent (one-shot, unlike sticky @-added contexts), via
+  eca-webview bump.
 - Inline "+ Add MCP server" form and per-row remove button (with two-step
   inline confirmation) on the Settings → MCPs tab. Wired
   `mcp/addServer`, `mcp/removeServer` requests and the `tool/serverRemoved`
@@ -31,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 verification or force the cached-binary fallback.
 
 ### Fixed
+- Image paste looked unsupported: the prompt contexts bar was hidden on
+  desktop, so pasted images and @-added contexts were attached invisibly.
+  The bar (with the `@ Add context` picker) is now visible; the stray
+  `cursor (:undefined:undefined)` chip that motivated hiding it is gone
+  (eca-webview now skips cursor chips without a live cursor).
 - Stop button unresponsive while tokens stream fast, via eca-webview bump
   (editor-code-assistant/eca-webview#18): stable message props and
   memoized, deferred markdown rendering stop the chat from re-parsing

@@ -209,12 +209,6 @@ html[data-editor="desktop"][data-theme="light"] {
  * "normal" is the webview default — no overrides needed.
  * ═══════════════════════════════════════════════════ */
 
-/* ── Always-on web overrides ── */
-/* Hide contexts file-picker (no desktop integration yet) */
-[data-editor="desktop"] .prompt-area .contexts {
-  display: none;
-}
-
 /* ── Normal + Big: sidebar replaces chat header (≥768px) ── */
 @media (min-width: 768px) {
   [data-editor="desktop"] .chat-header {
