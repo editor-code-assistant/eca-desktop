@@ -297,7 +297,12 @@ declare global {
         deleteBtn.textContent = '\u00d7'; // ×
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.ecaDesktop?.deleteChat(entry.id);
+            // The sidebar lists the server's chat history, so this
+            // permanently deletes the chat. Confirm before doing so.
+            const title = entry.title || 'New Chat';
+            if (window.confirm(`Permanently delete chat "${title}"?`)) {
+                window.ecaDesktop?.deleteChat(entry.id);
+            }
         });
 
         item.appendChild(dot);
