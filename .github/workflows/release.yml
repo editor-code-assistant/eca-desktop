@@ -23,7 +23,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  create-draft:
+    # electron-builder creates the draft release itself when it finds none
+    # for the tag. With three matrix jobs publishing at the same time that
+    # races and ends up with duplicate drafts and the assets split between
+    # them (v0.10.0 and v0.10.3 lost their Linux assets this way). Create
+    # the draft once up front so every job just uploads to it.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release for $TAG already exists, reusing it"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "${TAG#v}" --notes ""
+          fi
+
   release:
+    needs: create-draft
     strategy:
       fail-fast: false  # let the other platform finish even if one fails
       matrix:
