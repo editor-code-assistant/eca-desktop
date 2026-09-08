@@ -47,7 +47,7 @@
     "@types/node": "^20.x",
     "concurrently": "^9.1.2",
     "electron": "^41.0.0",
-    "electron-builder": "^26.0.0",
+    "electron-builder": "^26.16.1",
     "esbuild": "^0.25.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.0.0",
