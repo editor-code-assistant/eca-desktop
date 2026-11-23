@@ -33,15 +33,27 @@ vi.mock('electron-updater', () => ({
 
 // ── electron mock ────────────────────────────────────────────────
 const showMessageBox = vi.fn();
+const netFetch = vi.fn();
+const openExternal = vi.fn();
+const getVersion = vi.fn(() => '0.13.0');
 vi.mock('electron', () => ({
     BrowserWindow: vi.fn(),
+    app: {
+        getVersion: () => getVersion(),
+    },
     dialog: {
         showMessageBox: (...args: unknown[]) => showMessageBox(...args),
     },
+    net: {
+        fetch: (...args: unknown[]) => netFetch(...args),
+    },
+    shell: {
+        openExternal: (...args: unknown[]) => openExternal(...args),
+    },
 }));
 
-function makeFakeWindow() {
-    return {} as unknown as BrowserWindow;
+function makeFakeWindow(destroyed = false) {
+    return { isDestroyed: () => destroyed } as unknown as BrowserWindow;
 }
 
 // Let any pending microtasks (awaited .then() chains inside handlers) run.
@@ -155,5 +167,160 @@ describe('setupAutoUpdater', () => {
         // The `.catch` branch logs via console.error — no assertion needed
         // beyond "didn't reject up the stack".
         expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+});
+
+// ── Portable Windows exe ─────────────────────────────────────────
+// electron-builder's portable launcher exports PORTABLE_EXECUTABLE_FILE;
+// electron-updater can't update that build, so the module falls back to
+// a GitHub latest-release check + "open download page" notice.
+
+const RELEASE_API = 'https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest';
+const RELEASE_PAGE = 'https://github.com/editor-code-assistant/eca-desktop/releases/latest';
+
+function jsonResponse(body: unknown, status = 200) {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => body,
+    };
+}
+
+describe('portable Windows build', () => {
+    const origPlatform = process.platform;
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+        updater = makeUpdater();
+        showMessageBox.mockReset();
+        showMessageBox.mockResolvedValue({ response: 1 });
+        netFetch.mockReset();
+        netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.13.0' }));
+        openExternal.mockReset();
+        openExternal.mockResolvedValue(undefined);
+        getVersion.mockReturnValue('0.13.0');
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        process.env.PORTABLE_EXECUTABLE_FILE = 'C:\\Users\\me\\Downloads\\eca-win-x64.exe';
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        Object.defineProperty(process, 'platform', { value: origPlatform });
+        delete process.env.PORTABLE_EXECUTABLE_FILE;
+        consoleErrorSpy.mockRestore();
+        consoleLogSpy.mockRestore();
+        vi.resetModules();
+    });
+
+    describe('isPortableWindowsBuild', () => {
+        it('is true on win32 when launched by the portable launcher', async () => {
+            const { isPortableWindowsBuild } = await import('../updater');
+            expect(isPortableWindowsBuild()).toBe(true);
+        });
+
+        it('is false on win32 without the portable launcher env', async () => {
+            delete process.env.PORTABLE_EXECUTABLE_FILE;
+            const { isPortableWindowsBuild } = await import('../updater');
+            expect(isPortableWindowsBuild()).toBe(false);
+        });
+
+        it('is false off Windows even if the env var leaked', async () => {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            const { isPortableWindowsBuild } = await import('../updater');
+            expect(isPortableWindowsBuild()).toBe(false);
+        });
+    });
+
+    it('setupAutoUpdater skips electron-updater and checks the latest release instead', async () => {
+        const { setupAutoUpdater } = await import('../updater');
+        setupAutoUpdater(makeFakeWindow());
+        await flushMicrotasks();
+
+        expect(updater.checkForUpdates).not.toHaveBeenCalled();
+        // Flags left at their unconfigured defaults — nothing touched.
+        expect(updater.autoDownload).toBe(true);
+        expect(updater.autoInstallOnAppQuit).toBe(false);
+        expect(netFetch).toHaveBeenCalledTimes(1);
+        expect(netFetch.mock.calls[0][0]).toBe(RELEASE_API);
+    });
+
+    describe('notifyIfNewerRelease', () => {
+        async function run(win = makeFakeWindow()) {
+            const { notifyIfNewerRelease } = await import('../updater');
+            await notifyIfNewerRelease(win);
+        }
+
+        it('offers the download page for a newer release and opens it on accept', async () => {
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.14.0' }));
+            showMessageBox.mockResolvedValueOnce({ response: 0 }); // Open Download Page
+            await run();
+
+            expect(showMessageBox).toHaveBeenCalledTimes(1);
+            const [, opts] = showMessageBox.mock.calls[0];
+            expect(opts.title).toBe('Update Available');
+            expect(opts.message).toContain('0.14.0');
+            expect(opts.message).not.toContain('v0.14.0');
+            expect(opts.buttons).toEqual(['Open Download Page', 'Later']);
+            expect(opts.cancelId).toBe(1);
+            expect(openExternal).toHaveBeenCalledWith(RELEASE_PAGE);
+        });
+
+        it('does not open anything when the user picks Later', async () => {
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.14.0' }));
+            showMessageBox.mockResolvedValueOnce({ response: 1 });
+            await run();
+
+            expect(showMessageBox).toHaveBeenCalledTimes(1);
+            expect(openExternal).not.toHaveBeenCalled();
+        });
+
+        it('compares versions numerically, not lexicographically', async () => {
+            getVersion.mockReturnValue('0.13.9');
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.13.10' }));
+            await run();
+            expect(showMessageBox).toHaveBeenCalledTimes(1);
+        });
+
+        it.each([
+            ['the same version', 'v0.13.0'],
+            ['an older version', 'v0.10.3'],
+            ['an untagged-v same version', '0.13.0'],
+        ])('stays quiet when the latest release is %s', async (_label, tag) => {
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: tag }));
+            await run();
+            expect(showMessageBox).not.toHaveBeenCalled();
+            expect(openExternal).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['an HTTP error (e.g. rate limit)', () => netFetch.mockResolvedValue(jsonResponse({ message: 'rate limited' }, 403))],
+            ['a network failure', () => netFetch.mockRejectedValue(new Error('ENOTFOUND api.github.com'))],
+            ['a non-JSON body', () => netFetch.mockResolvedValue({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } })],
+            ['a body without tag_name', () => netFetch.mockResolvedValue(jsonResponse({}))],
+            ['a null body', () => netFetch.mockResolvedValue(jsonResponse(null))],
+            ['a non-version tag', () => netFetch.mockResolvedValue(jsonResponse({ tag_name: 'nightly' }))],
+        ])('logs and resolves without a dialog on %s', async (_label, arrange) => {
+            arrange();
+            await expect(run()).resolves.toBeUndefined();
+            expect(showMessageBox).not.toHaveBeenCalled();
+            expect(openExternal).not.toHaveBeenCalled();
+            expect(consoleErrorSpy).toHaveBeenCalled();
+        });
+
+        it('skips the dialog when the window was closed before the check finished', async () => {
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.14.0' }));
+            await run(makeFakeWindow(true));
+            expect(showMessageBox).not.toHaveBeenCalled();
+        });
+
+        it('swallows a failing openExternal', async () => {
+            netFetch.mockResolvedValue(jsonResponse({ tag_name: 'v0.14.0' }));
+            showMessageBox.mockResolvedValueOnce({ response: 0 });
+            openExternal.mockRejectedValue(new Error('no browser'));
+            await expect(run()).resolves.toBeUndefined();
+            expect(consoleErrorSpy).toHaveBeenCalled();
+        });
     });
 });

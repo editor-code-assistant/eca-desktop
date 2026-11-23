@@ -99,6 +99,12 @@ export const MIME_TO_EXTENSION: Record<string, string> = {
 export const DOCS_URL = 'https://eca.dev';
 export const ISSUES_URL = 'https://github.com/editor-code-assistant/eca-desktop/issues';
 
+// Latest published (non-draft, non-prerelease) desktop release: the API
+// endpoint backs the update notice for builds electron-updater can't
+// update in place (portable Windows exe); the page is what it opens.
+export const DESKTOP_LATEST_RELEASE_API = 'https://api.github.com/repos/editor-code-assistant/eca-desktop/releases/latest';
+export const DESKTOP_LATEST_RELEASE_URL = 'https://github.com/editor-code-assistant/eca-desktop/releases/latest';
+
 // ── HTTP ──
 
 export const HTTP_TIMEOUT_MS = 30_000;

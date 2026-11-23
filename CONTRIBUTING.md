@@ -73,7 +73,10 @@ npm run build           # Build all (webview + main + preload + renderer)
 npm run package         # Build + package for current platform
 npm run package:mac     # Package for macOS
 npm run package:linux   # Package for Linux
+npm run package:win     # Package for Windows (portable .exe)
 ```
+
+Every push and PR also builds the Windows portable `.exe` in CI, smoke-tests it on a Windows runner and attaches it to the workflow run as the `eca-win-x64-portable` artifact, so changes can be tried on Windows without a release.
 
 ### Linting
 

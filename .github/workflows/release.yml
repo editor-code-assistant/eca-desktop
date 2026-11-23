@@ -177,8 +177,11 @@ jobs:
 
       - name: Package & Publish (Windows)
         if: matrix.platform == 'win'
-        # Unsigned for now (SmartScreen will warn on first run). When a Windows
-        # signing cert is available, mirror the conditional CSC_LINK pattern
+        # Portable eca-win-x64.exe (see electron-builder.yml): no installer,
+        # and no latest.yml since electron-updater can't update it.
+        # Unsigned on purpose — signing needs a paid certificate or a
+        # Microsoft/Azure account — so SmartScreen warns on first run. If a
+        # certificate is ever added, mirror the conditional CSC_LINK pattern
         # used for macOS above.
         run: npx electron-builder --win --x64 --publish always
         env:

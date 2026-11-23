@@ -3,7 +3,7 @@
 [![CI](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/editor-code-assistant/eca-desktop/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/editor-code-assistant/eca-desktop?label=latest)](https://github.com/editor-code-assistant/eca-desktop/releases/latest)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)
 
 ![demo](./demo.gif)
 
@@ -18,7 +18,7 @@ This app will auto download `eca` and manage the process.
 
 ## Install
 
-Grab the latest installer for your platform from [**GitHub Releases**](https://github.com/editor-code-assistant/eca-desktop/releases/latest):
+Grab the latest build for your platform from [**GitHub Releases**](https://github.com/editor-code-assistant/eca-desktop/releases/latest):
 
 | Platform | Architecture          | Formats                         |
 |----------|-----------------------|---------------------------------|
@@ -26,6 +26,7 @@ Grab the latest installer for your platform from [**GitHub Releases**](https://g
 | macOS    | Apple Silicon (arm64) | `.dmg`, `.zip`                  |
 | Linux    | x64                   | `.AppImage`, `.deb`, `.flatpak` |
 | Linux    | arm64                 | `.AppImage`, `.deb`             |
+| Windows  | x64                   | portable `.exe`                 |
 
 For the Flatpak bundle:
 
@@ -34,11 +35,15 @@ flatpak install --user ./eca-linux-x86_64.flatpak
 flatpak run dev.eca.desktop
 ```
 
+On Windows, `eca-win-x64.exe` is a single portable executable: no installer and no admin rights, just download it and double-click. It is not code-signed, so on first launch SmartScreen shows *"Windows protected your PC"*: click **More info → Run anyway**. Each launch unpacks the app to a temporary folder (a few seconds, behind a splash screen) and removes it on exit; your preferences, sessions and the managed `eca` server are kept in your user profile (`%USERPROFILE%\.eca-desktop`), not next to the `.exe`.
+
 Release assets are published with [SLSA build provenance](https://slsa.dev/) so you can verify they were built by this repository's CI.
 
 > **Auto-updates:** `.dmg`, `.zip`, and `.AppImage` update in place via `electron-updater`.
 > `.deb` does **not** auto-update — upgrade by downloading a fresh `.deb` from Releases.
-> `.flatpak` app updates are owned by Flatpak — until ECA is on Flathub, upgrade by installing a fresh bundle. The managed `eca` server keeps auto-updating in every format.
+> `.flatpak` app updates are owned by Flatpak — until ECA is on Flathub, upgrade by installing a fresh bundle.
+> The portable Windows `.exe` can't replace itself — it tells you when a new release is out; download the new `.exe` and use it instead.
+> The managed `eca` server keeps auto-updating in every format.
 
 ## Settings
 
@@ -104,6 +109,7 @@ npm run package           # current platform
 npm run package:mac       # macOS
 npm run package:linux     # Linux (AppImage + deb)
 npm run package:flatpak   # Linux (Flatpak bundle, x64)
+npm run package:win       # Windows (portable .exe, x64; also cross-builds from Linux)
 ```
 
 Installers are written to `release/`.
@@ -125,7 +131,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 |----------|--------|
 | macOS (Intel & Apple Silicon) | ✅ Supported |
 | Linux (x64 & arm64) | ✅ Supported |
-| Windows | 🔮 Planned |
+| Windows (x64) | ✅ Supported (portable `.exe`) |
 
 ## Contributing 💙
 

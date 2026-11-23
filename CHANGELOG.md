@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Windows support (x64) as a single portable `eca-win-x64.exe`: no
+  installer, no admin rights, nothing to set up — download and
+  double-click. It is unsigned (SmartScreen: "More info → Run anyway"),
+  unpacks itself to a fresh temp dir on every launch behind a splash
+  screen (so launching it twice can't break the running copy) and
+  cleans up on exit. Since electron-updater can't update a portable
+  exe, it checks GitHub for a newer release on startup and offers to
+  open the download page instead.
+- CI builds the Windows portable exe on every push and PR, smoke-tests
+  it on a Windows runner (launch → window → close → clean exit) and
+  uploads it as a workflow artifact.
 - Pasted images in the chat prompt now render as a removable thumbnail
   chip in the contexts bar and are detached automatically once the
   prompt is sent (one-shot, unlike sticky @-added contexts), via
@@ -33,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sha256sums.txt` fetches with exponential backoff (1s/2s/4s, up to 4
   attempts). Previously a single network blip would silently skip
   SHA-256 verification or force the cached-binary fallback.
+
+### Changed
+- Windows releases ship the portable exe instead of the NSIS installer
+  previously attached to releases; existing NSIS installs no longer
+  receive updates, switch to the portable `.exe`.
 
 ### Fixed
 - Image paste looked unsupported: the prompt contexts bar was hidden on

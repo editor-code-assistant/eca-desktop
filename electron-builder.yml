@@ -74,14 +74,36 @@ flatpak:
 win:
   icon: resources/icon.png
   target:
-    # x64 only: upstream ECA server publishes no windows-aarch64 binary.
-    # NSIS (not zip/portable) is required for electron-updater auto-updates.
-    - target: nsis
+    # Portable: one self-contained .exe, double-click to run. No
+    # installer, no admin rights (requestExecutionLevel defaults to
+    # `user`), no runtime prerequisites. Unsigned on purpose — signing
+    # needs a paid certificate or a Microsoft/Azure account — so
+    # SmartScreen asks for "More info → Run anyway" on first launch.
+    # electron-updater can't update a portable exe (no latest.yml is
+    # published for it); updater.ts notifies about new releases instead.
+    # x64 only: upstream ECA server publishes no windows-aarch64 binary
+    # (Windows on ARM runs the x64 build under emulation).
+    - target: portable
       arch: [x64]
 
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+portable:
+  # Every launch extracts the app to a temp dir, runs it, and deletes
+  # the dir once it exits. `true` makes that dir unique per launch
+  # ($PLUGINSDIR\app). The schema documents `false` for this, but the
+  # code (NsisTarget: `typeof v === "string" || !v` → shared per-build
+  # ksuid dir) only skips the shared dir for `true`. With a shared dir a
+  # second launch wipes the running instance's files
+  # (electron-builder#5764); per-launch dirs let the second instance
+  # just hit the single-instance lock and focus the running window.
+  unpackDirName: true
+  # Shown while extracting (~350 MB, a few seconds) so a double-click
+  # gets immediate feedback instead of a silent pause. NSIS BgImage
+  # loads it with LoadImage: keep it an uncompressed BMP3 (currently
+  # 400x260, 8-bit palette); the popup is sized to the image and
+  # centered. Known upstream wart (electron-builder#7871): with a splash
+  # the launcher isn't silent, so its tiny NSIS window flashes briefly
+  # at start and on exit. Drop this line to get a fully silent launch.
+  splashImage: build/win-portable-splash.bmp
 
 publish:
   provider: github

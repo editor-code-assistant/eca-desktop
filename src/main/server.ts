@@ -32,6 +32,7 @@ import {
 import type { PreferencesStore } from './preferences-store';
 import { FLATPAK_SPAWN, HOST_SPAWN_ARGS, hostSpawnAvailable, isFlatpak, sanitizeEnvForHost } from './flatpak';
 import { resolveShellEnv } from './shell-env';
+import { compareVersions } from './version';
 
 // ── GitHub release shape (narrow type guard) ──
 // Replaces the audit-flagged `releases[0]?.tag_name` access on `unknown`.
@@ -50,24 +51,6 @@ function isGitHubRelease(v: unknown): v is GitHubRelease {
 
 function isGitHubReleaseArray(v: unknown): v is GitHubRelease[] {
     return Array.isArray(v) && (v.length === 0 || isGitHubRelease(v[0]));
-}
-
-// Compare two semver-ish tags ("0.5.5", "v0.6.0"). Returns negative if a < b,
-// zero if equal, positive if a > b. Non-numeric components are ignored.
-function compareVersions(a: string, b: string): number {
-    const normalize = (s: string): number[] =>
-        s.replace(/^v/, '').split(/[.\-+]/).map((p) => {
-            const n = parseInt(p, 10);
-            return Number.isFinite(n) ? n : 0;
-        });
-    const aa = normalize(a);
-    const bb = normalize(b);
-    const len = Math.max(aa.length, bb.length);
-    for (let i = 0; i < len; i++) {
-        const diff = (aa[i] ?? 0) - (bb[i] ?? 0);
-        if (diff !== 0) return diff;
-    }
-    return 0;
 }
 
 export enum EcaServerStatus {

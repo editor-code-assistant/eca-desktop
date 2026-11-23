@@ -49,3 +49,94 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  package-windows:
+    # Builds the actual Windows deliverable (the portable exe), runs it
+    # like a user double-clicking it, and uploads it so any commit or PR
+    # can be tried on Windows without cutting a release.
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            eca-webview/package-lock.json
+
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package portable exe
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Smoke-test the portable exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'release/eca-win-x64.exe').Path
+          $launcher = Start-Process -FilePath $exe -PassThru
+          # Cache the handle now, or ExitCode is unreadable once it exits.
+          $null = $launcher.Handle
+          try {
+            # The launcher shows the splash, unpacks the app into a temp
+            # dir and runs ECA.exe from there: wait for its main window.
+            $app = $null
+            $deadline = (Get-Date).AddMinutes(3)
+            while (-not $app) {
+              if ((Get-Date) -gt $deadline) { throw 'ECA window did not appear within 3 minutes' }
+              if ($launcher.HasExited) { throw "Launcher exited early with code $($launcher.ExitCode)" }
+              Start-Sleep -Seconds 2
+              $app = Get-Process -Name ECA -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            }
+            Write-Host "Window '$($app.MainWindowTitle)' up, running from $($app.Path)"
+            # `unpackDirName: true` must keep meaning a per-launch
+            # $PLUGINSDIR\app dir (see electron-builder.yml); a shared dir
+            # would let a second launch wipe a running instance's files.
+            if ($app.Path -notmatch '\\ns[^\\]+\.tmp\\app\\ECA\.exe$') {
+              throw "Expected ECA.exe in a per-launch ...\nsXXXX.tmp\app dir, got: $($app.Path)"
+            }
+            $appDir = Split-Path -Parent $app.Path
+            # Let the renderer and webview load, check the app survived
+            # startup, then close it the way a user would.
+            Start-Sleep -Seconds 15
+            if ($app.HasExited) { throw "ECA exited on its own with code $($app.ExitCode)" }
+            if (-not $app.CloseMainWindow()) { throw 'Could not send WM_CLOSE to the ECA window' }
+            if (-not $launcher.WaitForExit(60000)) { throw 'Launcher still running 60s after closing the window' }
+            if ($launcher.ExitCode -ne 0) { throw "Launcher exited with code $($launcher.ExitCode)" }
+            if (Test-Path $appDir) { throw "Launcher left its temp dir behind: $appDir" }
+            Write-Host 'Portable exe launched, ran, quit and cleaned up correctly.'
+          } finally {
+            Get-Process -Name ECA, eca-win-x64 -ErrorAction SilentlyContinue |
+              Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: eca-win-x64-portable
+          path: release/eca-win-x64.exe
+          if-no-files-found: error
+          retention-days: 14

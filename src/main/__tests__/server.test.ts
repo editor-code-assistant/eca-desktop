@@ -528,12 +528,10 @@ describe('EcaServer', () => {
         });
     });
 
-    // NOTE: `compareVersions` is module-private (not exported). Its
-    // effect is only observable via the `initialize` response path in
-    // start(), which requires spawning a real child_process + rpc
-    // connection to exercise. Skipping per the task's guidance — the
-    // function is covered indirectly by the initialize-response
-    // warning log when the protocol bumps MIN_SERVER_VERSION.
+    // NOTE: `compareVersions` itself is unit-tested in version.test.ts.
+    // The warning it drives is only observable via the `initialize`
+    // response path in start(), which requires spawning a real
+    // child_process + rpc connection to exercise.
     it.skip('compareVersions warns on older server versions (requires spawn mock)', () => {
         // Skipped: would require mocking child_process.spawn + vscode-jsonrpc
         // MessageConnection, which is beyond the scope of this unit test.
