@@ -49,14 +49,8 @@ jobs:
       fail-fast: false  # let the other platform finish even if one fails
       matrix:
         include:
-          # macOS is temporarily left out: the Apple developer account is
-          # blocked, so notarization fails (notarytool HTTP 401) and the
-          # failed job kept publish-release from running, leaving every
-          # release since v0.11.0 stuck as a draft. Once the account is
-          # sorted, re-enable it by restoring this entry (the macOS steps
-          # below are kept as-is):
-          #   - os: macos-latest
-          #     platform: mac
+          - os: macos-latest
+            platform: mac
           - os: ubuntu-latest
             platform: linux
           - os: windows-latest
@@ -114,6 +108,7 @@ jobs:
         run: npm run build
 
       - name: Package & Publish (macOS)
+        id: package-mac
         if: matrix.platform == 'mac'
         shell: bash
         # Secrets are staged under *_RAW aliases via env: and only re-exported
@@ -128,20 +123,60 @@ jobs:
           APPLE_ID_RAW: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD_RAW: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID_RAW: ${{ secrets.APPLE_TEAM_ID }}
+          # Notarization is skipped for now: the Apple developer account is
+          # blocked, so notarytool rejects the credentials (HTTP 401) and the
+          # job used to fail, which kept every release since v0.11.0 stuck as
+          # a draft. Builds stay Developer ID-signed, so in-place auto-updates
+          # keep working; a fresh download needs a one-time Gatekeeper
+          # approval (see README). Set back to 'true' once notarytool accepts
+          # the credentials again.
+          MAC_NOTARIZE: 'false'
         run: |
+          notarize_flag=""
           if [[ -n "${CSC_LINK_RAW:-}" ]]; then
-            echo "→ Apple signing identity present; building SIGNED (+ notarized if Apple* secrets set)"
             export CSC_LINK="$CSC_LINK_RAW"
             export CSC_KEY_PASSWORD="$CSC_KEY_PASSWORD_RAW"
-            export APPLE_ID="$APPLE_ID_RAW"
-            export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
-            export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
             # Leave CSC_IDENTITY_AUTO_DISCOVERY unset → electron-builder default (true)
+            if [[ "$MAC_NOTARIZE" == "true" ]]; then
+              echo "→ Apple signing identity present; building SIGNED (+ notarized if Apple* secrets set)"
+              export APPLE_ID="$APPLE_ID_RAW"
+              export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
+              export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
+            else
+              echo "→ Apple signing identity present; building SIGNED, notarization SKIPPED (MAC_NOTARIZE=$MAC_NOTARIZE)"
+              notarize_flag="-c.mac.notarize=false"
+            fi
+            echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "→ No Apple signing identity; building UNSIGNED"
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
-          npx electron-builder --mac --x64 --arm64 --publish always
+          npx electron-builder --mac --x64 --arm64 --publish always ${notarize_flag:+"$notarize_flag"}
+
+      - name: Verify macOS code signature
+        if: matrix.platform == 'mac' && steps.package-mac.outputs.signed == 'true'
+        shell: bash
+        # Without notarization the Developer ID signature is all macOS has to
+        # go on: Gatekeeper's "Open Anyway" and Squirrel.Mac updates (which
+        # check the designated requirement, team 762737A9Q2) both need it
+        # intact. Failing here keeps publish-release from going out. The
+        # Gatekeeper assessment is informational: it rejects unnotarized
+        # apps by design.
+        run: |
+          shopt -s nullglob
+          apps=(release/mac*/ECA.app)
+          if [[ ${#apps[@]} -eq 0 ]]; then
+            echo "No ECA.app bundles found under release/"
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            echo "── $app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign --display --verbose=2 "$app" 2>&1 \
+              | grep -E '^(Identifier|Authority|TeamIdentifier|Timestamp|Runtime Version)=' || true
+            spctl --assess --type execute --verbose=4 "$app" 2>&1 || true
+          done
 
       - name: Cache flatpak runtimes (Linux)
         if: matrix.platform == 'linux'

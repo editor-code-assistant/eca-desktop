@@ -49,10 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows releases ship the portable exe instead of the NSIS installer
   previously attached to releases; existing NSIS installs no longer
   receive updates, switch to the portable `.exe`.
-- Releases temporarily ship without macOS binaries while Apple code
-  signing is unavailable (notarization failures had kept every release
-  since v0.11.0 stuck as a draft); the latest macOS build remains
-  v0.10.3.
+- macOS builds are temporarily signed but not notarized: notarization
+  fails while the Apple developer account is blocked, which had kept
+  every release since v0.11.0 stuck as a draft. A freshly downloaded
+  copy needs a one-time "Open Anyway" in System Settings → Privacy &
+  Security; in-place auto-updates are unaffected. The release job now
+  verifies the macOS code signature before a release can go out.
 
 ### Fixed
 - Image paste looked unsupported: the prompt contexts bar was hidden on

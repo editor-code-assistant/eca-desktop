@@ -28,7 +28,7 @@ Grab the latest build for your platform from [**GitHub Releases**](https://githu
 | Linux    | arm64                 | `.AppImage`, `.deb`             |
 | Windows  | x64                   | portable `.exe`                 |
 
-> **macOS:** new macOS builds are temporarily paused while Apple code signing is sorted out; the latest macOS build is [v0.10.3](https://github.com/editor-code-assistant/eca-desktop/releases/tag/v0.10.3).
+> **macOS:** builds are signed but temporarily **not notarized**, so macOS blocks the first launch of a freshly downloaded copy. Try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway** (on macOS 14 and older you can instead right-click the app → **Open**). Auto-updates of an existing install are not affected.
 
 For the Flatpak bundle:
 
