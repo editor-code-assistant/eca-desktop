@@ -353,4 +353,64 @@ describe('router.dispatch', () => {
             expect((errCall![1] as Record<string, unknown>).requestId).toBe('r-7');
         });
     });
+
+    describe('providers/*', () => {
+        it('forwards the server result with the webview requestId', async () => {
+            const { ctx, conn, sendToRenderer } = makeCtx();
+            conn.sendRequest.mockResolvedValue({ action: 'authorize', url: 'https://auth.example.com', message: 'm' });
+
+            await dispatch(ctx, {
+                type: 'providers/login' as never,
+                data: { provider: 'openai', method: 'pro', requestId: 'r-1' },
+            });
+
+            expect(conn.sendRequest).toHaveBeenCalledWith(
+                expect.objectContaining({ method: 'providers/login' }),
+                { provider: 'openai', method: 'pro', requestId: 'r-1' },
+            );
+            expect(sendToRenderer).toHaveBeenCalledWith('providers/login', {
+                action: 'authorize',
+                url: 'https://auth.example.com',
+                message: 'm',
+                requestId: 'r-1',
+            });
+        });
+
+        it.each(['providers/list', 'providers/login', 'providers/loginInput', 'providers/logout'])(
+            '%s answers a server error right away instead of leaving the webview waiting',
+            async (type) => {
+                const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+                const { ctx, conn, sendToRenderer } = makeCtx();
+                // What the ECA server answers when it can't listen for the OAuth callback.
+                conn.sendRequest.mockRejectedValue(
+                    Object.assign(new Error('Could not listen on port 1455 for the OAuth callback (Address already in use).'), { code: -32001 }),
+                );
+
+                await dispatch(ctx, { type: type as never, data: { provider: 'openai', requestId: 'r-2' } });
+
+                expect(sendToRenderer).toHaveBeenCalledWith(type, {
+                    requestId: 'r-2',
+                    error: {
+                        code: 'rpc_error',
+                        message: 'Could not listen on port 1455 for the OAuth callback (Address already in use).',
+                    },
+                });
+                warn.mockRestore();
+            },
+        );
+
+        it('falls back to a generic message when the error has none', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const { ctx, conn, sendToRenderer } = makeCtx();
+            conn.sendRequest.mockRejectedValue(new Error(''));
+
+            await dispatch(ctx, { type: 'providers/login' as never, data: { requestId: 'r-3' } });
+
+            expect(sendToRenderer).toHaveBeenCalledWith('providers/login', {
+                requestId: 'r-3',
+                error: { code: 'rpc_error', message: 'Unknown error' },
+            });
+            warn.mockRestore();
+        });
+    });
 });

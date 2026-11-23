@@ -30,6 +30,32 @@ interface RouteContext {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteHandler = (ctx: RouteContext, data: Record<string, any>) => Promise<void> | void;
 
+/**
+ * Forward a webview request to the server and send back its result — or,
+ * when the server answers with an error, that error, right away. The webview
+ * waits for a reply carrying its `requestId`: without one it sits out a 30s
+ * timeout and the user never learns why (e.g. why a provider login failed:
+ * the server explains when it can't listen for the OAuth callback).
+ */
+async function forwardRequest<P, R>(
+    ctx: RouteContext,
+    type: string,
+    request: rpc.RequestType<P, R, void>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: Record<string, any>,
+): Promise<void> {
+    try {
+        const result = await ctx.conn.sendRequest(request, data as P);
+        ctx.sendToRenderer(type, { ...result, requestId: data.requestId });
+    } catch (err) {
+        console.warn(`[Router] ${type} failed:`, err);
+        ctx.sendToRenderer(type, {
+            requestId: data.requestId,
+            error: { code: 'rpc_error', message: (err as Error)?.message || 'Unknown error' },
+        });
+    }
+}
+
 // ── Route table ──
 
 const routes: Record<string, RouteHandler> = {
@@ -277,25 +303,13 @@ const routes: Record<string, RouteHandler> = {
 
     // ── Providers ──
 
-    'providers/list': async (ctx, data) => {
-        const result = await ctx.conn.sendRequest(rpcTypes.providersList, data);
-        ctx.sendToRenderer('providers/list', { ...result, requestId: data.requestId });
-    },
+    'providers/list': (ctx, data) => forwardRequest(ctx, 'providers/list', rpcTypes.providersList, data),
 
-    'providers/login': async (ctx, data) => {
-        const result = await ctx.conn.sendRequest(rpcTypes.providersLogin, data);
-        ctx.sendToRenderer('providers/login', { ...result, requestId: data.requestId });
-    },
+    'providers/login': (ctx, data) => forwardRequest(ctx, 'providers/login', rpcTypes.providersLogin, data),
 
-    'providers/loginInput': async (ctx, data) => {
-        const result = await ctx.conn.sendRequest(rpcTypes.providersLoginInput, data);
-        ctx.sendToRenderer('providers/loginInput', { ...result, requestId: data.requestId });
-    },
+    'providers/loginInput': (ctx, data) => forwardRequest(ctx, 'providers/loginInput', rpcTypes.providersLoginInput, data),
 
-    'providers/logout': async (ctx, data) => {
-        const result = await ctx.conn.sendRequest(rpcTypes.providersLogout, data);
-        ctx.sendToRenderer('providers/logout', { ...result, requestId: data.requestId });
-    },
+    'providers/logout': (ctx, data) => forwardRequest(ctx, 'providers/logout', rpcTypes.providersLogout, data),
 
     // ── Background Jobs ──
 

@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verifies the macOS code signature before a release can go out.
 
 ### Fixed
+- Provider login failures were invisible: a failed `providers/*` request
+  left Settings → Providers spinning for 30 s, then silently gave up. The
+  server's reason (e.g. it can't listen for the OAuth callback because the
+  port is taken or, on Windows, reserved) now shows on the provider card
+  right away, via eca-webview bump.
 - Image paste looked unsupported: the prompt contexts bar was hidden on
   desktop, so pasted images and @-added contexts were attached invisibly.
   The bar (with the `@ Add context` picker) is now visible; the stray
