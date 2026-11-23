@@ -28,6 +28,8 @@ Grab the latest build for your platform from [**GitHub Releases**](https://githu
 | Linux    | arm64                 | `.AppImage`, `.deb`             |
 | Windows  | x64                   | portable `.exe`                 |
 
+> **macOS:** new macOS builds are temporarily paused while Apple code signing is sorted out; the latest macOS build is [v0.10.3](https://github.com/editor-code-assistant/eca-desktop/releases/tag/v0.10.3).
+
 For the Flatpak bundle:
 
 ```bash

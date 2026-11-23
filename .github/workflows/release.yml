@@ -49,8 +49,14 @@ jobs:
       fail-fast: false  # let the other platform finish even if one fails
       matrix:
         include:
-          - os: macos-latest
-            platform: mac
+          # macOS is temporarily left out: the Apple developer account is
+          # blocked, so notarization fails (notarytool HTTP 401) and the
+          # failed job kept publish-release from running, leaving every
+          # release since v0.11.0 stuck as a draft. Once the account is
+          # sorted, re-enable it by restoring this entry (the macOS steps
+          # below are kept as-is):
+          #   - os: macos-latest
+          #     platform: mac
           - os: ubuntu-latest
             platform: linux
           - os: windows-latest
