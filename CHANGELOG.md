@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Roll a chat back to a flag from its line, as for user messages: the
+  flag stays and only what came after it goes, on servers supporting
+  it, via eca-webview bump.
 - Windows support (x64) as a single portable `eca-win-x64.exe`: no
   installer, no admin rights, nothing to set up — download and
   double-click. It is unsigned (SmartScreen: "More info → Run anyway"),
