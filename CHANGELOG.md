@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Show what each turn used under its answer, e.g.
+  `claude-sonnet-4-5 · 9.8s · 412 output tokens · $0.03`: its model,
+  how long it took, the tokens the model generated and its cost, also
+  in reopened chats, on servers supporting it, via eca-webview bump.
 - Roll a chat back to a flag from its line, as for user messages: the
   flag stays and only what came after it goes, on servers supporting
   it, via eca-webview bump.
