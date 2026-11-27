@@ -3,6 +3,7 @@ import path from 'path';
 import * as fs from 'fs';
 import { pathToFileURL, fileURLToPath } from 'url';
 import { createBridge } from './bridge';
+import { attachContextMenu } from './context-menu';
 import { getLogStore } from './log-store';
 import { createMenu } from './menu';
 import { setupAutoUpdater } from './updater';
@@ -222,6 +223,14 @@ async function main(): Promise<void> {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(path.join(__dirname, '../resources/icon.png'));
   }
+
+  // Right-click menu (Copy, plus Cut/Paste/… in text fields) for every
+  // window — main, preferences, input dialog — registered before the
+  // first one is created. Other webContents types (e.g. DevTools, which
+  // has its own menu) are skipped.
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() === 'window') attachContextMenu(contents);
+  });
 
   const mainWindow = createWindow();
 

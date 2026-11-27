@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Right-click menu to copy text: Copy on selected text (chat answers,
+  logs, …), Undo/Redo/Cut/Copy/Paste/Select All in text fields (chat
+  prompt, Preferences, login dialogs) and Copy Link on web links.
+  Right-clicking used to do nothing, leaving only the keyboard or the
+  Edit menu to copy.
 - Show what each turn used under its answer, e.g.
   `claude-sonnet-4-5 · 9.8s · 412 output tokens · $0.03`: its model,
   how long it took, the tokens the model generated and its cost, also
