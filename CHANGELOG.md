@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Show how fast the model generated each turn under its answer, e.g.
+  `412 output tokens · 87 tok/s`: its output tokens over the time its
+  responses took, so short ones like tool calls barely sway it. Once
+  it shows, the subheader no longer tells the speed of the last
+  response, until the next turn starts. On servers supporting it
+  (ECA 0.175.1+), via eca-webview bump.
 - Right-click menu to copy text: Copy on selected text (chat answers,
   logs, …), Undo/Redo/Cut/Copy/Paste/Select All in text fields (chat
   prompt, Preferences, login dialogs) and Copy Link on web links.
